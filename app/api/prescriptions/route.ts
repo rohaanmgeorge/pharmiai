@@ -5,8 +5,8 @@ import { safetyLog } from "@/lib/safety/log";
 import type { CatalogEntry } from "@/lib/safety/match";
 import { normalizeCode } from "@/lib/safety/shorthand";
 import { computeStatus } from "@/lib/safety/status";
+import { requireUser } from "@/lib/server/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { supabaseServer } from "@/lib/supabase/server";
 
 export const maxDuration = 60; // two AI readings can take a while
 
@@ -16,11 +16,9 @@ const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/h
 // POST /api/prescriptions  (multipart form: image, optional patientId)
 // Scan → two independent readings → Zero-Guess status per medicine → saved for review.
 export async function POST(request: Request) {
-  const supabase = await supabaseServer();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: "Please log in" }, { status: 401 });
+  const auth = await requireUser(request);
+  if (auth instanceof NextResponse) return auth;
+  const { supabase, user } = auth;
 
   const form = await request.formData();
   const file = form.get("image");
@@ -52,6 +50,9 @@ export async function POST(request: Request) {
   const itemsB: ReadItem[] = resB.status === "fulfilled" ? resB.value.items : [];
 
   const admin = supabaseAdmin();
+  // Doctor name is only a suggestion until a person confirms it on the review screen.
+  const doctorRead = resA.status === "fulfilled" ? resA.value.doctor : null;
+  if (doctorRead) await admin.from("prescriptions").update({ doctor_read: doctorRead }).eq("id", rx.id);
   await admin.from("readings").insert([
     { prescription_id: rx.id, engine: "gemini_a", raw: resA.status === "fulfilled" ? { model: resA.value.model, items: itemsA } : { error: "failed" } },
     { prescription_id: rx.id, engine: "gemini_b", raw: resB.status === "fulfilled" ? { model: resB.value.model, items: itemsB } : { error: "failed" } },
@@ -76,6 +77,8 @@ export async function POST(request: Request) {
       food: a?.food ?? b?.food ?? null,
       status: result.status, // never "verified" here: a person has not confirmed yet
       reasons: result.reasons,
+      reading_a: a, // kept so the confirm step can re-check against both readings
+      reading_b: b,
     };
   });
 
@@ -88,5 +91,5 @@ export async function POST(request: Request) {
     ...(saved ?? []).map((s) => ({ actor: user.id, patientId, itemId: s.id, event: "status_computed", payload: { status: s.status } })),
   ]);
 
-  return NextResponse.json({ prescriptionId: rx.id, count: rows.length });
+  return NextResponse.json({ prescriptionId: rx.id, count: rows.length, needsCheck: rows.filter((r) => r.status !== "not_recognized").length });
 }

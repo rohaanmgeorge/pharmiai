@@ -1,6 +1,6 @@
 # PharmiAI — Plan
 
-> Hackathon: Project Nevermore, Domain 1 (AI Automation). Prototype with fictional demo data. **Not a medical device — never diagnoses, prescribes, or gives dosing advice.**
+> Hackathon: Project Nevermore, Domain 1 (AI Automation). Prototype tested with real family prescriptions (personal details covered, see §16.1) and a hand-curated catalog. **Not a medical device — never diagnoses, prescribes, or gives dosing advice.**
 > Companion docs: [DESIGN.md](DESIGN.md) · [CLAUDE.md](CLAUDE.md) · [STATUS.md](STATUS.md) · [docs/NEEDS.md](docs/NEEDS.md)
 
 ## 1. Decisions taken
@@ -248,7 +248,8 @@ Rules:
 - **Images:** prescription images go in a private bucket and are opened through signed URLs that expire after 60 seconds.
 - **Deletion:** "Delete my data" in Settings cascades through every table and removes Storage objects.
 - **Logs:** no health data in logs. `safety_log` holds IDs and codes only. Server `console` output is scrubbed.
-- **Repo:** `data/private/` and `.env*` are gitignored. All demo data is fictional.
+- **Repo:** `data/private/` and `.env*` are gitignored. Real prescriptions only with permission and with personal details covered (§16.1).
+- **Free Gemini tier:** Google may keep and human-review inputs, so never send uncovered names, phones, addresses or IDs.
 
 ## 11. Testing
 - **Vitest unit tests:**
@@ -272,14 +273,14 @@ Rules:
 | 02:30–05:00 | P2: schedules, cron tick, push with pill photo, Taken/Skip/Snooze, offline outbox | push arrives and Taken is recorded |
 | 05:00–06:15 | Hardening, unit tests, deploy | **HARD GATE: scan → approve → reminder → Taken on the deployed app on a real phone** |
 | 06:30 | Progress review | |
-| 06:30–08:30 | P3: voice mode + voice agent, duplicates, savings, family circle + consent, escalation, SOS + card/QR | each demoable once |
+| 06:30–08:30 | ~~P3~~ (replaced by §16.11) P3: voice mode + voice agent, duplicates, savings, family circle + consent, escalation, SOS + card/QR | each demoable once |
 | 08:30–09:00 | PPT (Person B starts at 07:30) | |
 | 09:00 | Mentor evaluation | |
 | 09:00–11:00 | P4: animations polish, elder mode, eval script numbers, adherence chart; if-time features | |
 | 11:00 | **Feature freeze**; record backup demo video | |
 | 11:00–12:00 | Rehearse demo ×3 | |
 
-**Cut first, in this order:** every if-time feature → adherence chart → laptop family dashboard → animations polish (keep the basic fades) → email escalation (keep push) → lock-screen QR (keep the share link).
+**Superseded by §16.11.** Old: **Cut first, in this order:** every if-time feature → adherence chart → laptop family dashboard → animations polish (keep the basic fades) → email escalation (keep push) → lock-screen QR (keep the share link).
 **Never cut:** Zero-Guess (statuses, triggers, the log), consent, permission prompts, the safety disclaimer, the 108/112 call button.
 
 ## 13. Work split (2 people)
@@ -304,7 +305,9 @@ Rules:
 | Cloud Vision billing not ready | items stay "Needs check" (fails safe); reading B shown as unavailable |
 | pg_cron misfires | "Run tick now" button in test mode (hits the same endpoint with the secret, server-side) |
 | Venue Wi-Fi fails | phone hotspot; recorded backup video |
-| Time overrun | follow the cut list in §12 |
+| Time overrun | follow the simplify list in §16.11 |
+| Realtime drops on venue Wi-Fi | 30 s polling fallback; pill shows "Reconnecting" |
+| Real catalog not ready | real lines stay "Not recognized" (safe); demo with rows already imported |
 
 ## 15. Demo script (3 min)
 1. **0:00** Problem: one line about elderly parents, many prescriptions and missed doses. Show Elder mode in Malayalam.
@@ -317,3 +320,140 @@ Rules:
 8. **2:40** SOS (test mode): countdown ring, then "Daughter is going ✓", the 108 button, and the Emergency Card QR.
 9. **2:55** Close: "Zero-Guess: wrong-but-Verified = 0 across N sample prescriptions."
 
+
+---
+
+## 16. Scope change (2026-10-30 ~02:00): six features moved to Committed
+
+Approved defaults: Supabase Realtime + 30 s polling fallback · simple text search · refill at 5 days · expiry alerts 30/7/0 days · "Are you okay?" after 2 missed doses in a row **and** 3 h with no activity · 15 min wait · quiet hours 22:00–07:00 · expiry read by two blind readings + a person always confirms · messages to people without the app go through the user's own WhatsApp/SMS/email (we never send them automatically).
+
+**Committed (after the 06:30 gate — the gate comes first, always):**
+
+| # | Feature | First version (what "done" means) |
+|---|---|---|
+| C1 | **Prescription locker** | list (newest first), detail with signed-URL image, search, "Show to doctor" big view. Date-range filter only if time. |
+| C2 | **Medicine scan + expiry** (one feature) | photograph a strip/box (front and/or back) → two blind readings of brand, strength, expiry, batch → exact catalog match + person confirms → "is this one of my medicines?", duplicate warning, expiry badge, "Add to stock". Expiry list + alerts. |
+| C3 | **Refill agent** | deterministic run-out date → suggestion card at ≤5 days → LLM drafts the reorder message only → user edits and sends it from their own app → "Refilled" asks the real quantity. |
+| C4 | **Unresponsive check ("Are you okay?")** | trigger → push + in-app "I'm okay" → after 15 min alert circle/contacts in order, each in their language → "I'm checking" / "I reached her" stops it. Quiet hours + Away/Hospital pause. |
+| C5 | **Live family dashboard** | one card per elder, live via Realtime, "Live / Reconnecting / Offline, last updated…" pill, weekly adherence bars. Nothing cached offline. |
+
+**Not committed (only if everything above is done):** scan-to-check at dose time, follow-up visit reminder, weekly family summary, share medicine list.
+
+### 16.1 Real prescriptions (changed from "fictional demo data")
+- We now test with **real family prescriptions, with permission**. Before every photo, the patient's **name, phone, address and ID numbers are covered** (paper or marker), because the free Gemini tier lets Google keep and human-review inputs. The same goes for anything shown on the projector or in the PPT.
+- Real photos and their truth files stay in `data/private/` (gitignored). Never committed, never in screenshots shared outside the team.
+- The catalog must contain the real medicines on those prescriptions (Person B, see NEEDS) — otherwise every line is correctly "Not recognized". Uses/side effects come from the package leaflet or CDSCO/NFI, with `source` filled; the app still shows "Not medical advice".
+
+### 16.2 Schema additions (migration `0003_committed_features.sql`) — RLS on every table
+| Table / column | Key columns | RLS |
+|---|---|---|
+| `prescriptions` + cols | `doctor_name` (null until a person confirms), `approved_by`, `approved_at` | as before (`can_view` read, `can_manage` write) |
+| `profiles` + cols | `pharmacy_name`, `pharmacy_phone`, `pharmacy_email`, `refill_days int default 5`, `expiry_alert_days int[] default {30,7,0}`, `check_missed int default 2`, `check_idle_hours int default 3`, `check_wait_min int default 15`, `quiet_start time default 22:00`, `quiet_end time default 07:00`, `presence (home/away/hospital) default home`, `check_consent bool default false`, `check_consent_by uuid`, `last_activity_at` | own row write; `can_manage` may change thresholds/pharmacy/presence; `check_consent` only by the patient or a managing caregiver (trigger) |
+| `strips` | `id, patient_id, image_path, catalog_id?, status (verified/needs_check/not_recognized), expiry_month date?, batch?, quantity?, schedule_id?, state (in_use/finished/expired), confirmed_by/at, created_by` | `can_view` read; insert/confirm only via API + `confirm_strip()` RPC (`can_manage`); `status`/`expiry_month` not client-writable |
+| `strip_readings` | `strip_id, engine (gemini_a/gemini_b), raw jsonb` | `can_view` read; server insert only |
+| `refill_suggestions` | `id, patient_id, schedule_id, days_left, runout_date, draft_text?, lang, state (open/later/approved/sent/refilled/dismissed), approved_by/at, refilled_qty?, refilled_at` | `can_view` read; state changes via RPC (`can_manage`); unique open suggestion per schedule |
+| `wellness_checks` | `id, patient_id, trigger_dose_id, state (asking/escalating/ok/acknowledged/sos/stopped), started_at, ended_at, ended_by` | `can_view` read; patient answers "I'm okay"; caregivers ack; **unique open check per patient** (partial unique index) |
+| `check_alerts` | `check_id, level, recipient_member_id?, recipient_contact_id?, channel (push/link), sent_at, ack (checking/reached)?, acked_at` | patient + circle read; ack via RPC |
+| `sent_notifications` | `key text primary key, sent_at` | server only (service role). **This is the idempotency key for every scheduler message**, e.g. `expiry:<strip>:30`, `refill:<schedule>:<runout_date>`, `check:<check>:L2` |
+| `schedules` + col | usable stock = `stock` minus quantity of expired strips linked to it (view `schedule_stock`) | as before |
+
+Realtime: add `dose_events, strips, refill_suggestions, wellness_checks, check_alerts, sos_events` to the `supabase_realtime` publication. Realtime `postgres_changes` applies the table's RLS to each authenticated subscriber, so a viewer only receives rows `can_view` allows. **Test: a user outside the circle subscribes and receives nothing.**
+
+**Deletion:** "Delete my data" removes all of the above plus every Storage object under `<patient_id>/`. Strip photos are deleted automatically 30 days after the strip expires or is marked finished; prescription photos stay until the user deletes them (the locker needs them).
+
+### 16.3 API endpoints (all: Zod-validated, user client so RLS applies; auth = Supabase session cookie **or** `Authorization: Bearer <access token>`, both verified by `supabase.auth.getUser()`)
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/locker?q=&from=&to=` | prescriptions newest first; search **confirmed fields only** (medicine name, ingredient, doctor name, date) with `ILIKE` |
+| GET | `/api/locker/:id` | detail + 60 s signed image URL + confirmed items + who approved |
+| POST | `/api/strips` | upload strip photo → two blind readings → match → status; returns crop hints |
+| POST | `/api/strips/:id/confirm` | `{catalog_id, expiry "YYYY-MM", batch?, quantity?, schedule_id?}` → `confirm_strip()` |
+| GET | `/api/strips` | expiry list, soonest first, badge OK / Expiring soon / Expired |
+| POST | `/api/strips/:id/finish` | mark finished |
+| GET | `/api/refills` | open suggestions |
+| POST | `/api/refills/:id/draft` | refill agent drafts message in chosen language |
+| POST | `/api/refills/:id/approve` | `{text}` → records approver, returns `wa.me` / `sms:` / `mailto:` links |
+| POST | `/api/refills/:id/later` · `/refilled {quantity}` | snooze 1 day · add real quantity to stock |
+| PATCH | `/api/profile/care-settings` | thresholds, pharmacy, presence, check consent |
+| POST | `/api/activity` | "app opened" ping (client sends at most once per 10 min) |
+| POST | `/api/checks/:id/ok` · `/ack {checking|reached}` · `/sos` | answer, acknowledge, escalate to SOS |
+| GET | `/api/dashboard` | first snapshot of all elders the user can view (Realtime keeps it fresh) |
+
+### 16.4 Zero-Guess for medicine scan + expiry (`lib/safety/strip.ts`, `computeStripStatus`)
+- Two blind Gemini readings (different prompts), transcription only: `brand, strength, expiry, batch`, null when unclear.
+- **Medicine:** same exact-match rule as prescriptions (`matchName` with strength); look-alikes listed, never auto-picked; Verified only after a person confirms the entry both readings agreed on.
+- **Expiry:** both readings must agree on one valid month/year (month 1–12, year within today−5…today+10). Formats accepted: `MM/YYYY`, `MM/YY`, `MON YYYY`, `MON-YY`. Disagree or invalid → show the photo crop and the person types it. **No expiry is stored without a person confirming.**
+- **Batch** is optional and never blocks.
+- Linking a strip to a scheduled medicine is offered only when the catalog ids match exactly; otherwise the user chooses. Never automatic.
+- **Never identify loose tablets by shape or colour** — refuse politely.
+- Strip photos double as the reminder pill photo once linked.
+
+### 16.5 Agent tools (Gemini function calling; tools act as the signed-in user, so RLS applies)
+| Tool | Who decides | Notes |
+|---|---|---|
+| `get_stock(schedule_id)` | DB | usable stock (expired strips excluded) |
+| `predict_runout(schedule_id)` | **code** (`lib/safety/medication-math.ts`): stock ÷ doses per day, using confirmed Taken events since last refill | the LLM never computes dates |
+| `draft_refill_message(suggestion_id, lang)` | LLM writes text only | input = medicine name + strength from DB, quantity from code, pharmacy name. Server guard rejects drafts containing dose advice or a different medicine name. User edits before sending. |
+| `record_refill(suggestion_id, quantity)` | user approval required | records who approved |
+| `get_expiry_list`, `search_locker(q)` | DB | for voice: "Which medicines are expiring?" |
+| Unresponsive check | **code only** (`lib/safety/wellness.ts`) | timing/eligibility never decided by the LLM; message text from i18n templates |
+
+Generic (Jan Aushadhi) suggestion in a refill card only for Verified medicines (DB rows).
+
+### 16.6 Scheduler jobs (inside `/api/cron/tick`, every minute; each message guarded by a `sent_notifications` key)
+1. **Expiry:** for confirmed strips, days to end of expiry month ∈ profile `expiry_alert_days` → push. Past expiry → `state=expired`, removed from usable stock, warning on Today/Expiry list.
+2. **Refill:** active schedule with days left ≤ `refill_days` and no open suggestion → create suggestion + push.
+3. **Unresponsive check:** patient with `check_consent`, `presence=home`, not in quiet hours (handles windows crossing midnight), ≥ `check_missed` consecutive missed doses **and** `last_activity_at` older than `check_idle_hours` → open check, push "Are you okay?" + in-app banner. After `check_wait_min` with no answer → alert circle members (push, in their language) then emergency contacts (caregivers see a WhatsApp/SMS link + call button), one level per wait period. Stops immediately on "I'm okay", any activity, or an acknowledgment.
+   - **Activity** = a dose action (Taken/Skip/Snooze), opening the app (`/api/activity`), any voice/chat message, or tapping "I'm okay". Push delivery alone does not count.
+4. **Cleanup (once a day):** delete strip photos 30 days after expiry/finish.
+
+### 16.7 Screens and states (new)
+| Screen | Path | Notes |
+|---|---|---|
+| Locker list | `/locker` | cards: date, doctor, medicine count, Active/Completed, thumbnail; staggered entry; search bar |
+| Locker detail | `/locker/[id]` | image, confirmed items, approved by; "Show to doctor" |
+| Show to doctor | `/locker/[id]/show` | read-only, huge text, white background, no actions |
+| Medicine scan | `/scan?mode=medicine` | same scanner, mode toggle "Prescription · Medicine" |
+| Strip review | `/strips/[id]` | medicine + expiry fields, crop when unclear, link-to-schedule chooser |
+| Expiry list | `/expiry` | soonest first, badges OK / Expiring soon / Expired |
+| Refill card | chat + Home + `/refills/[id]` | "Review order" → editable draft → share buttons; "Later" |
+| Are you okay? | full-screen overlay | one giant "I'm okay" button (Elder mode friendly) |
+| Check status (caregiver) | `/checks/[id]` | ladder progress, "I'm checking" / "I reached her", "Escalate to SOS", call button |
+| Family dashboard | `/family` (laptop two-pane, phone stacked) | per-elder card + connection pill + weekly bars |
+| Care settings | `/settings/care` | thresholds, pharmacy, quiet hours, presence, check consent |
+
+Every screen: loading skeleton · empty state · calm error · offline (dashboard shows "Offline, last updated hh:mm" and **no cached health data**).
+
+### 16.8 Tests
+- Unit: `computeStripStatus` (agree/disagree/invalid month/missing), expiry parser formats, `predictRunout`, refill threshold, wellness trigger (fake clock, quiet hours across midnight, away/hospital, activity resets), idempotency key builder, refill-draft guard.
+- DB: RLS for every new table with two users; client can't set `strips.status`/`expiry_month`; Realtime subscriber outside the circle receives nothing; `sent_notifications` blocks duplicates.
+- Eval: `npm run eval` extended over `data/private/strips/*` → wrong-but-Verified (medicine **or** expiry) must be 0.
+
+### 16.9 Acceptance checks
+- C1: approved prescription appears in locker; searching a medicine/doctor finds it; viewer can open but has no edit buttons; image link expires.
+- C2: clear strip → medicine + expiry need one confirm tap; blurred strip → user must type expiry; expired strip shows warning and lowers usable stock; alert at 30 days arrives once only.
+- C3: stock set to 8 tablets at 2/day → refill card appears; draft is in chosen language; "Refilled 30" raises stock by 30; caregiver approval shows their name.
+- C4: 2 missed + idle → "Are you okay?"; tapping it stops everything; no answer → caregiver push after 15 min (demo: 1 min in test mode); nothing during quiet hours or when Away.
+- C5: tap Taken on phone A → dashboard on phone B/laptop updates within ~2 s with "Live"; turn off Wi-Fi → "Offline, last updated…".
+
+### 16.10 Demo segment (30 s, inserted after step 5 of §15)
+1. Laptop shows the live family dashboard ("Live"). On the elder's phone, tap **Taken** → the laptop card ticks over within seconds.
+2. Home shows a **refill card** ("Glyconil runs out in 4 days") → Review order → draft in Malayalam → Share to WhatsApp.
+3. Scan a strip → "Expiring soon (Dec 2026)" badge on the Expiry list.
+
+### 16.11 Time budget — honest
+It is ~02:00 and the gate is not finished. The five features + medicine scan are roughly **6–7 hours** of work; after 06:30 we have about **4.5 hours** of build time, which the old P3 list already filled. **It does not all fit.** New order after the gate (replaces §12 P3/P4):
+
+| Time | Work |
+|---|---|
+| 02:00–05:15 | **Gate** (scanner → review → approve → Today → cron tick + push → Taken) |
+| 05:15–06:15 | Hardening, deploy, phone test |
+| 06:30–07:30 | C2 medicine scan + expiry (reuses the prescription pipeline) + C1 locker list/detail |
+| 07:30–08:30 | C3 refill + C5 live dashboard |
+| 08:30–09:00 | PPT |
+| 09:00–10:15 | Family circle + consent, C4 unresponsive check (shares the escalation ladder code), SOS |
+| 10:15–11:00 | Voice mode with fixed intents, duplicates + savings wiring |
+| 11:00 | Feature freeze |
+
+**Simplify first, in this order:** voice agent → fixed intents (no tool loop) · locker search → medicine name only, no date filter · expiry batch number · dashboard weekly bars · Away/Hospital (quiet hours stay) · animation polish.
+**Never cut:** the gate, Zero-Guess, consent, RLS, the safety disclaimer, 108/112.

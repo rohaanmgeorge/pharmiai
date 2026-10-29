@@ -18,6 +18,13 @@ Never paste keys into chat, code, or commits. Keys go only in `.env.local` (giti
 | MP3 fallback phrases (list provided) | B | 45m | 09:00 |
 | 2 test phones (Android Chrome required) | A+B | — | 05:00 |
 
+| **Real catalog rows** for every medicine on the real prescriptions (same CSV format; uses/side effects from the package leaflet / CDSCO / NFI with `source` filled) → re-run `npm run import-catalog` | B | 1.5h | **05:00 (gate)** |
+| Real prescription photos with **patient name, phone, address, IDs covered**, family only with permission → `data/private/prescriptions/` + `.truth.json` | B | 30m | 04:00 |
+| 3–5 photos of strip/box **backs** with a readable expiry (one blurred on purpose) → `data/private/strips/sNN.jpg` + `sNN.truth.json` `{brand,strength,expiry:"YYYY-MM",batch}` | B | 30m | 06:30 |
+| One demo pharmacy contact (team member's own number/email — never a real shop) | B | 5m | 07:30 |
+| Second phone or laptop logged in as caregiver for the live dashboard demo | A+B | — | 08:00 |
+
+**Privacy reminder (real prescriptions):** the free Gemini tier lets Google keep and human-review what we send. Cover personal details before every photo, and in anything shown on the projector or in the PPT.
 
 ## Environment variables (names only — values never committed)
 | Name | Where it's used | Secret? |
@@ -39,4 +46,4 @@ Run in the project folder (in Claude Code, prefix with `!`):
 4. Supabase: supabase.com → New project → region **Mumbai (ap-south-1)** → save DB password in a password manager. Database → Extensions → enable `pg_cron`, `pg_net`. Project Settings → API → copy URL + keys into `.env.local` and Vercel.
 
 ## Fallback voice phrases to record (Malayalam + Hindi, ~3 s each, MP3)
-Time for your medicine · Did you take it? · Marked as taken · Skipped · I'll remind you in 10 minutes · I'm not sure, please ask your doctor or pharmacist · I can't give dose advice · Calling for help in 5 seconds · Help is on the way · Your family has been informed · Please say that again · Your stock is running low · Your course is complete · Good morning · Voice is not available, please read the screen
+Time for your medicine · Did you take it? · Marked as taken · Skipped · I'll remind you in 10 minutes · I'm not sure, please ask your doctor or pharmacist · I can't give dose advice · Calling for help in 5 seconds · Help is on the way · Your family has been informed · Please say that again · Your stock is running low · Your course is complete · Good morning · Voice is not available, please read the screen · Are you okay? · Tap if you are okay · Your medicine is expiring soon · This medicine has expired · Time to reorder

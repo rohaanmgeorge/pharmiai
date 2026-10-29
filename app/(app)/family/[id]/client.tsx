@@ -7,7 +7,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import { AdherenceBars, DoseCard } from "@/components/cards";
 import { Avatar, Card, PillButton, SectionTitle } from "@/components/ui";
-import { caredFor, escalationTimeline, todayDoses } from "@/lib/mock";
+import { caredFor, escalationTimeline, mockDose, todayDoses } from "@/lib/mock";
 
 const ICONS = { bell: Bell, repeat: Repeat, user: User, mail: Mail } as const;
 
@@ -82,7 +82,7 @@ export function MemberClient() {
           <SectionTitle>Today</SectionTitle>
           <div className="space-y-3">
             {doses.map((d) => (
-              <DoseCard key={d.id} dose={d} compact />
+              <DoseCard key={d.id} dose={mockDose(d)} compact />
             ))}
           </div>
         </div>

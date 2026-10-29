@@ -124,3 +124,21 @@ Rules: animate only `transform` and `opacity`; 60fps; `prefers-reduced-motion` �
 | LanguagePicker | EN · മലയാളം · हिन्दी |
 | ElderTalkButton | 96px round lime Talk button |
 | SafetyDisclaimer | "PharmiAI is not a doctor. It never gives dose advice." |
+
+## 7. Components for the committed features (PLAN §16)
+| Component | Notes |
+|---|---|
+| LockerCard | date, doctor name (or "Doctor not added"), medicine count, Active (lime chip) / Completed (grey chip), 56px thumbnail; list entry staggered 40ms per card |
+| SearchBar | rounded input 24px, search icon, clear button; searches confirmed text only |
+| DoctorView | "Show to doctor": white full screen, medicine rows at `h1` size, no buttons except Close; screen stays awake |
+| ScanModeToggle | pill toggle "Prescription · Medicine" above the capture button |
+| ExpiryBadge | StatusBadge variants: OK (`--ok`, check), Expiring soon (`--warn`, clock), Expired (`--danger`, triangle) — always icon + text, never colour alone |
+| CropPreview | zoomed photo crop of the unclear field above a large month/year picker |
+| RefillCard | pill icon, "Runs out in N days", Jan Aushadhi line (Verified only), buttons "Review order" (green-700) and "Later" (outlined) |
+| DraftEditor | editable message, language chips, share buttons WhatsApp / SMS / Email |
+| OkayPrompt | full-screen calm overlay, 160px lime "I'm okay" button, no countdown, no flashing |
+| CheckLadder | vertical steps (Asked → Family → Contacts) with ack chips "I'm checking" / "Reached ✓" |
+| ElderSummaryCard | dashboard card: doses today (n/m), low stock, expiries, active check/SOS (red ring), last activity |
+| LivePill | "● Live" (`--ok`), "Reconnecting…" (`--warn`, slow pulse), "Offline, last updated 10:42" (grey) |
+
+Motion: dashboard values crossfade (220ms) on live update; a new dose tick does a single 0.97→1 scale. Reduced motion / Elder mode rules from §5 apply (no pulse loops in Elder mode).

@@ -6,7 +6,19 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { usePrefs } from "@/components/providers";
 import { Avatar, Card, cn, PillButton, StatusBadge } from "@/components/ui";
-import { type Contact, type Dose, type DoseState, getMedicine, type Medicine, medicines, weekAdherence, yearlySavings } from "@/lib/mock";
+import { type Contact, type DoseState, type Medicine, medicines, weekAdherence, yearlySavings } from "@/lib/mock";
+
+/** What a dose card needs. Comes from /api/today (real) or lib/mock (design screens). */
+export type DoseView = {
+  id: string;
+  name: string;
+  form: string;
+  food: "before" | "after" | null;
+  time: string;
+  state: DoseState;
+  photoUrl?: string | null;
+  color?: string;
+};
 
 /** Simple illustrated pill-strip "photo" placeholder (real app shows the user's own strip photo). */
 export function PillStrip({ color = "#ffffff", size = 56 }: { color?: string; size?: number }) {
@@ -34,18 +46,24 @@ const stateLabel: Record<DoseState, { text: string; cls: string }> = {
   missed: { text: "Missed", cls: "bg-danger-soft text-danger" },
 };
 
-export function DoseCard({ dose, onAct, compact = false }: { dose: Dose; onAct?: (state: DoseState) => void; compact?: boolean }) {
+export function DoseCard({ dose, onAct, compact = false, busy = false }: { dose: DoseView; onAct?: (state: DoseState) => void; compact?: boolean; busy?: boolean }) {
   const { t } = usePrefs();
-  const med = getMedicine(dose.medicineId)!;
+  const med = dose;
   const label = stateLabel[dose.state];
   const actionable = dose.state === "pending" || dose.state === "snoozed";
   return (
     <motion.div layout className="rounded-card bg-surface p-4 shadow-card">
       <div className="flex items-center gap-3">
-        <PillStrip color={med.color} />
+        {med.photoUrl ? (
+          // The family's own photo of this strip, so the elder can match it at a glance.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={med.photoUrl} alt={`Photo of ${med.name} strip`} className="size-14 shrink-0 rounded-sm object-cover" />
+        ) : (
+          <PillStrip color={med.color} />
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-lg font-bold">{med.brand}</span>
+            <span className="text-lg font-bold">{med.name}</span>
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-2">
             <span className="inline-flex items-center gap-1">
@@ -74,13 +92,13 @@ export function DoseCard({ dose, onAct, compact = false }: { dose: Dose; onAct?:
       </div>
       {actionable && onAct && !compact && (
         <div className="mt-4 grid grid-cols-3 gap-2">
-          <PillButton size="sm" onClick={() => onAct("skipped")}>
+          <PillButton size="sm" disabled={busy} onClick={() => onAct("skipped")}>
             <SkipForward className="size-4" aria-hidden /> {t("skip")}
           </PillButton>
-          <PillButton size="sm" onClick={() => onAct("snoozed")}>
+          <PillButton size="sm" disabled={busy} onClick={() => onAct("snoozed")}>
             <AlarmClock className="size-4" aria-hidden /> {t("snooze")}
           </PillButton>
-          <PillButton size="sm" variant="lime" onClick={() => onAct("taken")}>
+          <PillButton size="sm" variant="lime" disabled={busy} onClick={() => onAct("taken")}>
             <Check className="size-4" aria-hidden /> {t("taken")}
           </PillButton>
         </div>
@@ -191,15 +209,18 @@ export function SOSStatusCard({ contacts, states }: { contacts: Contact[]; state
 }
 
 /** Weekly adherence: rounded vertical bars, lime = taken, grey = missed. */
-export function AdherenceBars() {
-  const max = 5;
+export type AdherenceDay = { day: string; taken: number; total: number };
+
+export function AdherenceBars({ days = weekAdherence }: { days?: AdherenceDay[] }) {
+  const weekAdherence = days;
+  const max = Math.max(1, ...days.map((d) => d.total));
   return (
     <Card className="p-5">
       <div className="flex items-end justify-between">
         <div>
           <div className="text-sm font-bold text-ink-2">This week</div>
           <div className="text-[2rem] leading-tight font-extrabold">
-            {Math.round((weekAdherence.reduce((a, d) => a + d.taken, 0) / weekAdherence.reduce((a, d) => a + d.total, 0)) * 100)}%
+            {Math.round((weekAdherence.reduce((a, d) => a + d.taken, 0) / Math.max(1, weekAdherence.reduce((a, d) => a + d.total, 0))) * 100)}%
           </div>
         </div>
         <div className="flex gap-3 text-xs font-bold text-ink-2">

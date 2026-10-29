@@ -8,7 +8,7 @@ import { DoseCard, MedicineSummary, SavingsCard } from "@/components/cards";
 import { AssistantIcon } from "@/components/illustrations";
 import { usePrefs } from "@/components/providers";
 import { PillButton } from "@/components/ui";
-import { type Dose, type DoseState, getMedicine, todayDoses } from "@/lib/mock";
+import { type Dose, type DoseState, getMedicine, mockDose, todayDoses } from "@/lib/mock";
 
 type Rich = { kind: "dose"; dose: Dose } | { kind: "savings" } | { kind: "medicine"; id: string };
 type Msg = { id: number; from: "user" | "ai"; text: string; time: string; rich?: Rich; chips?: string[] };
@@ -115,7 +115,7 @@ export default function ChatPage() {
                   </div>
                   {m.rich?.kind === "dose" && (
                     <DoseCard
-                      dose={{ ...m.rich.dose, state: doseStates[m.rich.dose.id] ?? m.rich.dose.state }}
+                      dose={mockDose({ ...m.rich.dose, state: doseStates[m.rich.dose.id] ?? m.rich.dose.state })}
                       onAct={(s) => setDoseStates((d) => ({ ...d, [(m.rich as { dose: Dose }).dose.id]: s }))}
                     />
                   )}

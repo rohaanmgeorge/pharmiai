@@ -228,3 +228,9 @@ export const yearlySavings = () =>
     const diffPerTablet = (m.brandPricePerStrip - m.genericPricePerStrip) / m.stripSize;
     return sum + diffPerTablet * tabletsPerYear;
   }, 0);
+
+/** Shapes a demo dose for the shared DoseCard (design screens only). */
+export const mockDose = (d: Dose) => {
+  const m = getMedicine(d.medicineId)!;
+  return { id: d.id, name: m.brand, form: m.form, food: m.food, time: d.time, state: d.state, color: m.color };
+};

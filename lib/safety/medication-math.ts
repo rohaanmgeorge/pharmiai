@@ -36,3 +36,16 @@ export function courseEndDate(start: Date, durationDays: number): Date {
   end.setDate(end.getDate() + durationDays - 1);
   return end;
 }
+
+/**
+ * Run-out prediction for the refill agent — plain arithmetic, never AI.
+ * stock = tablets left (already lowered by every confirmed "Taken"), dosesPerDay from the schedule.
+ * Returns days left and the date the last tablet is taken, or null if we can't predict.
+ */
+export function predictRunout(stock: number, dosesPerDay: number, today: string): { daysLeft: number; runoutDate: string } | null {
+  const daysLeft = daysOfStockLeft(stock, dosesPerDay);
+  if (daysLeft === null) return null;
+  const d = new Date(`${today}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + daysLeft);
+  return { daysLeft, runoutDate: d.toISOString().slice(0, 10) };
+}

@@ -32,8 +32,9 @@ const SCHEMA = {
         required: ["name", "strength", "doseCode", "durationDays", "food"],
       },
     },
+    doctor: nullable("string"),
   },
-  required: ["items"],
+  required: ["items", "doctor"],
 };
 
 const RULES = `Rules — follow exactly:
@@ -44,7 +45,8 @@ const RULES = `Rules — follow exactly:
 - doseCode: the dose pattern exactly as written (e.g. "1-0-1", "OD", "BD", "TDS", "HS", "SOS"), else null.
 - durationDays: number of days only if clearly written (e.g. "x 5 days" → 5, "x 1 month" → 30), else null.
 - food: "before" or "after" only if written (e.g. "AC"/"before food" → before, "PC"/"after food" → after), else null.
-- Ignore the doctor name, patient details, signatures and anything that is not a medicine line.
+- doctor: the doctor's printed name (e.g. "Dr. A. Kumar"), else null. A person confirms it later.
+- Ignore patient details (name, age, phone, address), signatures and anything that is not a medicine line.
 - If the image is not a prescription, return {"items": []}.`;
 
 const PROMPT_A = `You are transcribing a doctor's prescription photo for a medicine-safety app.
@@ -58,31 +60,33 @@ ${RULES}`;
 let client: GoogleGenAI | null = null;
 const ai = () => (client ??= new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! }));
 
-async function ask(model: string, prompt: string, image: { data: string; mimeType: string }): Promise<ReadItem[]> {
+async function ask(model: string, prompt: string, image: { data: string; mimeType: string }): Promise<{ items: ReadItem[]; doctor: string | null }> {
   const res = await ai().models.generateContent({
     model,
     contents: [{ role: "user", parts: [{ inlineData: image }, { text: prompt }] }],
     config: { responseMimeType: "application/json", responseJsonSchema: SCHEMA },
   });
-  const parsed = JSON.parse(res.text ?? "{}") as { items?: ReadItem[] };
+  const parsed = JSON.parse(res.text ?? "{}") as { items?: ReadItem[]; doctor?: unknown };
   if (!Array.isArray(parsed.items)) throw new Error("Reading returned no items list");
   // Keep only the fields we asked for, with the types we expect.
-  return parsed.items.map((i) => ({
+  const doctor = typeof parsed.doctor === "string" && parsed.doctor.trim() ? parsed.doctor.trim().slice(0, 80) : null;
+  const items = parsed.items.map((i) => ({
     name: typeof i.name === "string" && i.name.trim() ? i.name.trim() : null,
     strength: typeof i.strength === "string" && i.strength.trim() ? i.strength.trim() : null,
     doseCode: typeof i.doseCode === "string" && i.doseCode.trim() ? i.doseCode.trim() : null,
     durationDays: Number.isInteger(i.durationDays) ? i.durationDays : null,
     food: i.food === "before" || i.food === "after" ? i.food : null,
   }));
+  return { items, doctor };
 }
 
 async function withFallback(model: string, prompt: string, image: { data: string; mimeType: string }) {
   try {
-    return { model, items: await ask(model, prompt, image) };
+    return { model, ...(await ask(model, prompt, image)) };
   } catch (e) {
     // Overloaded or failed: one retry on the fallback model, then give up (the item stays "Needs check").
     if (model === FALLBACK_MODEL) throw e;
-    return { model: FALLBACK_MODEL, items: await ask(FALLBACK_MODEL, prompt, image) };
+    return { model: FALLBACK_MODEL, ...(await ask(FALLBACK_MODEL, prompt, image)) };
   }
 }
 

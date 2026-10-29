@@ -8,7 +8,7 @@ import { DoseCard } from "@/components/cards";
 import { usePrefs } from "@/components/providers";
 import { AiHeadline, cn, PillButton } from "@/components/ui";
 import { LANGS } from "@/lib/i18n";
-import { todayDoses } from "@/lib/mock";
+import { mockDose, todayDoses } from "@/lib/mock";
 import { speak, useMicLevel, useSpeechToText } from "@/lib/voice";
 
 const BARS = 28;
@@ -128,7 +128,7 @@ export default function VoicePage() {
             <motion.div key="reply" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full space-y-5">
               <AiHeadline>{REPLY[lang]}</AiHeadline>
               <div className="text-left">
-                <DoseCard dose={todayDoses[3]} compact />
+                <DoseCard dose={mockDose(todayDoses[3])} compact />
               </div>
               {noVoice ? (
                 <p className="rounded-full bg-warn-soft px-4 py-2 text-sm font-semibold text-warn">

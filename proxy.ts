@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 
 // Keeps the Supabase login session fresh and sends logged-out visitors to /login.
-const PUBLIC_PATHS = ["/", "/login", "/auth", "/card", "/manifest.webmanifest", "/icon.svg"];
+const PUBLIC_PATHS = ["/", "/login", "/auth", "/card", "/manifest.webmanifest", "/icon.svg", "/sw.js", "/ack"];
 
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });

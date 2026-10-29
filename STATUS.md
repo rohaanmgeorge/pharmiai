@@ -1,44 +1,23 @@
 # Status
 
-_Last updated: 2026-10-29 23:55 IST_
+_Last updated: 2026-10-30 ~02:15 IST_
 
 ## Done
-- Planning docs: `PLAN.md`, `DESIGN.md`, `CLAUDE.md`, `docs/NEEDS.md`.
-- **Complete UI design built as the real Next.js app, using fictional demo data (no backend yet).**
-  - Screens:
-    - `/` onboarding
-    - `/chat`
-    - `/voice`
-    - `/scan`
-    - `/review`
-    - `/today`
-    - `/meds/[id]`
-    - `/savings`
-    - `/family`
-    - `/family/[id]`
-    - `/contacts`
-    - `/sos`
-    - `/card/[token]`
-    - `/elder`
-    - `/more`
-    - `/settings`
-    - `/states` (gallery of the loading, empty, error and offline states)
-  - Design tokens are in `app/globals.css`, matching `DESIGN.md`. Shared components are in `components/`.
-  - Features that already work for real:
-    - The Voice Mode microphone waveform reacts to sound (Web Audio).
-    - Speech-to-text uses the browser's Web Speech API, with a scripted demo when it isn't available.
-    - Text-to-speech uses the phone's own voice.
-    - The scanner opens the phone camera.
-    - The emergency card shows a real QR code.
-  - Also working: languages (EN/ML/HI), Elder mode, and the SOS button on every screen.
-- Checked: `tsc`, `eslint` and `next build` all pass. All routes return 200. Headless screenshots at 390px (phone) and 1280px (laptop) show no sideways scrolling.
+- Planning docs, full UI design with demo data (all screens), deployed at https://pharmiai.vercel.app (auto-deploy from `main`).
+- Supabase: schema + RLS (`0001_init.sql`), catalog CSVs imported, email + password login with route protection (`proxy.ts`) — sign-up confirmed working live.
+- AI switched to **Google Gemini** (no Anthropic key). Two blind readings (`gemini-3.5-flash` / `gemini-3.5-flash-lite`); Cloud Vision not used yet.
+- Zero-Guess core in `lib/safety/` with 35 passing tests; `POST /api/prescriptions` runs the real scan pipeline.
+- Eval on the private demo prescription: 3 Verified (all correct), 1 Needs check, 1 Not recognized, **wrong-but-Verified = 0**.
+
+## Scope change (2026-10-30 ~02:00) — see PLAN.md §16
+- Moved to **Committed** (after the gate): prescription locker, medicine scan + expiry (merged), refill agent, unresponsive "Are you okay?" check, live family dashboard. Defaults approved.
+- Testing now uses **real family prescriptions** with personal details covered (free Gemini tier may keep inputs).
+- Honest: these do not all fit at full depth; the simplify order is in PLAN.md §16.11. Waiting for team approval of the updated docs before any feature code.
 
 ## Issues / notes
-- `gh` and `vercel` are not installed yet. The Supabase, Anthropic and Google Cloud accounts are still pending (see `docs/NEEDS.md`).
-- Next 16 build issue we hit: a URL hook (`usePathname`) inside `<Suspense>` in the shell made the server re-render forever. Fix: `cacheComponents` is off and URL hooks are used directly.
-- Malayalam and Hindi strings in `lib/i18n.ts` are drafts. Person B must review them.
-- Nothing is committed yet.
+- Real prescriptions will show "Not recognized" until Person B adds their medicines to the catalog.
+- Migration `0002_gemini_readings.sql` — confirm it has been run in Supabase.
+- Malayalam/Hindi strings are drafts (Person B to review).
 
 ## Next step
-- P0: install `gh`, first commit and push, import into Vercel, open the deployed URL on a phone.
-- P1: Supabase schema + RLS, then wire scan → review → approve to the real Zero-Guess pipeline. This replaces `lib/mock.ts` one screen at a time.
+- **Gate (before 06:30):** wire scanner → `/api/prescriptions`; review screen from real data with confirm; approve → schedules; Today from DB with `act_on_dose`; cron tick + web push.
