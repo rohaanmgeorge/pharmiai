@@ -22,7 +22,7 @@ Never paste keys into chat, code, or commits. Keys go only in `.env.local` (giti
 ## Environment variables (names only — values never committed)
 | Name | Where it's used | Secret? |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | server only | yes |
+| `GEMINI_API_KEY` | server only (aistudio.google.com → Get API key, free, no card) | yes |
 | `GOOGLE_VISION_API_KEY` | server only (key restricted to Cloud Vision API) | yes |
 | `NEXT_PUBLIC_SUPABASE_URL` | client + server | no |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | client + server (RLS protects data) | no |

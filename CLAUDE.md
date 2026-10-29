@@ -6,7 +6,7 @@ Mobile-first PWA medicine care assistant (hackathon prototype, fictional data). 
 - One **Next.js App Router** app on Vercel (UI in `app/`, API route handlers in `app/api/`). Tailwind v4, shadcn/ui, lucide-react, Motion, Serwist PWA.
 - **Supabase**: Postgres + RLS + Auth + private Storage. Migrations in `supabase/migrations/`, seed CSVs in `supabase/seed/`.
 - **pg_cron + pg_net** call `POST /api/cron/tick` every minute (header `x-cron-secret`).
-- AI: Claude API via `@anthropic-ai/sdk`. `claude-opus-5-5` (prescription reading, structured outputs, effort high) and `claude-haiku-5-5` (voice + escalation agents, effort low). Second reading: Google Cloud Vision. Voice: browser Web Speech API only.
+- AI: **Google Gemini** via `@google/genai` (free tier; team has no Anthropic key). A stronger Gemini model reads prescriptions (structured JSON output); a faster one runs the voice + escalation agents (function calling). Confirm exact model IDs with the ListModels API before use. Second reading: Google Cloud Vision. Voice: browser Web Speech API only.
 
 ## Code map
 - `app/(app)/*` — screens inside the app shell (bottom nav / side nav + SOS button). Full-screen flows: `app/scan`, `app/voice`, `app/sos`, `app/elder`, `app/card/[token]`.

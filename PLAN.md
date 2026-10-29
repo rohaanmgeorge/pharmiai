@@ -7,7 +7,7 @@
 
 | # | Decision |
 |---|---|
-| 1 | **Claude API** (TypeScript SDK `@anthropic-ai/sdk`). Two models, IDs checked against the current docs (see the API notes below): **`claude-opus-5-5`** reads prescriptions; **`claude-haiku-5-5`** runs the voice and escalation agents. |
+| 1 | ~~Claude API~~ → **changed to Google Gemini (free tier)** because the team has no Anthropic key. Was: **Claude API** (TypeScript SDK `@anthropic-ai/sdk`). Two models, IDs checked against the current docs (see the API notes below): **`claude-opus-5-5`** reads prescriptions; **`claude-haiku-5-5`** runs the voice and escalation agents. |
 | 2 | Second independent reading: **Google Cloud Vision** `DOCUMENT_TEXT_DETECTION`, using an API key that only works with Vision and is only used on the server. Free for 1,000 images a month; needs a billing card. |
 | 3–4 | Voice: **browser only.** Speech-to-text uses `webkitSpeechRecognition` (`en-IN`, `ml-IN`, `hi-IN`). Text-to-speech uses `speechSynthesis`. Fallback when a voice is missing (see §14): pre-recorded MP3s of fixed phrases, plus large text on screen. |
 | 5 | **Supabase:** Postgres, magic-link email login, private Storage, row-level security (RLS). Region: Mumbai. |
