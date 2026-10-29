@@ -1,0 +1,8 @@
+brand,ingredients,strength,form,mrp,pack_size,uses_en,uses_ml,uses_hi,side_effects_en,side_effects_ml,side_effects_hi,source,reviewer
+Glyconil 500,Metformin:500mg,500 mg,Tablet,42,10,Helps control blood sugar in type 2 diabetes.,,,Upset stomach; Nausea; Loose stools; Metallic taste,,,DEMO - fictional brand for testing,Team (demo)
+Metsure SR 500,Metformin:500mg,500 mg,Tablet,55,10,Helps control blood sugar in type 2 diabetes (slow release).,,,Upset stomach; Nausea; Loose stools,,,DEMO - fictional brand for testing,Team (demo)
+Pressana 5,Amlodipine:5mg,5 mg,Tablet,64,10,Lowers high blood pressure.,,,Ankle swelling; Headache; Flushing; Tiredness,,,DEMO - fictional brand for testing,Team (demo)
+Atorvix 10,Atorvastatin:10mg,10 mg,Tablet,98,10,Lowers cholesterol.,,,Muscle aches; Headache; Upset stomach,,,DEMO - fictional brand for testing,Team (demo)
+Pantora 40,Pantoprazole:40mg,40 mg,Tablet,120,15,Reduces stomach acid.,,,Headache; Diarrhoea; Wind,,,DEMO - fictional brand for testing,Team (demo)
+Losarin 50,Losartan:50mg,50 mg,Tablet,88,10,Lowers high blood pressure.,,,Dizziness; Tiredness,,,DEMO - fictional brand for testing,Team (demo)
+Lasorin 40,Furosemide:40mg,40 mg,Tablet,30,10,Removes extra water from the body.,,,Passing more urine; Dizziness; Thirst,,,DEMO - fictional brand for testing,Team (demo)

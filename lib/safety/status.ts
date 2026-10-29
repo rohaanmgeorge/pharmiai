@@ -43,8 +43,8 @@ function conflict<T>(a: T | null, b: T | null, same: (x: T, y: T) => boolean) {
 
 export function computeStatus(input: { a: Reading | null; b: Reading | null; catalog: CatalogEntry[]; confirmation?: Confirmation | null }): StatusResult {
   const { a, b, catalog, confirmation } = input;
-  const ma = matchName(a?.name, catalog);
-  const mb = matchName(b?.name, catalog);
+  const ma = matchName(a?.name, catalog, a?.strength);
+  const mb = matchName(b?.name, catalog, b?.strength);
   const candidates = [...new Map([...ma.candidates, ...mb.candidates].map((c) => [c.id, c])).values()];
 
   if (!ma.exact && !mb.exact && candidates.length === 0) {

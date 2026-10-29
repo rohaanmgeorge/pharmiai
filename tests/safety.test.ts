@@ -144,3 +144,26 @@ describe("medication math", () => {
     expect(courseEndDate(new Date(2026, 10, 1), 5).getDate()).toBe(5);
   });
 });
+
+describe("matching name + strength and aligning readings", () => {
+  it("matches a name written apart from its strength, exactly", () => {
+    expect(matchName("Tab. Glyconil", catalog, "500 mg").exact?.id).toBe("glyconil");
+    expect(matchName("Glyconil", catalog, "850 mg").exact).toBeNull();
+    expect(matchName("Glyconil", catalog).exact).toBeNull();
+  });
+
+  it("verifies when readings split name and strength", () => {
+    const r: Reading = { name: "Glyconil", strength: "500 mg", doseCode: "1-0-1", durationDays: 30 };
+    expect(computeStatus({ a: r, b: r, catalog, confirmation: confirm }).status).toBe("verified");
+  });
+
+  it("pairs lines by name and pairs unreadable lines together", async () => {
+    const { alignReadings } = await import("@/lib/safety/align");
+    const pairs = alignReadings(
+      [{ name: "Glyconil" }, { name: null }, { name: "Pressana" }],
+      [{ name: "Pressana" }, { name: "Glyconil" }, { name: null }],
+    );
+    expect(pairs).toHaveLength(3);
+    expect(pairs.map((p) => [p.a?.name, p.b?.name])).toEqual([["Glyconil", "Glyconil"], [null, null], ["Pressana", "Pressana"]]);
+  });
+});

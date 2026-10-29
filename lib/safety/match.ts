@@ -62,12 +62,18 @@ function looksAlike(a: string, b: string) {
   return levenshtein(a, b) <= LOOK_ALIKE_DISTANCE || levenshtein(wordPart(a), wordPart(b)) <= LOOK_ALIKE_DISTANCE;
 }
 
-export function matchName(raw: string | null | undefined, catalog: CatalogEntry[]): MatchResult {
+/**
+ * Exact match on the written name — or on name + strength number, because prescriptions often
+ * write "Glyconil 500 mg" which a reading splits into name "Glyconil" and strength "500 mg".
+ */
+export function matchName(raw: string | null | undefined, catalog: CatalogEntry[], strength?: string | null): MatchResult {
   if (!raw || !raw.trim()) return { exact: null, candidates: [] };
   const n = normalizeName(raw);
   if (!n) return { exact: null, candidates: [] };
-  const exactMatches = catalog.filter((c) => normalizeName(c.name) === n);
-  const candidates = catalog.filter((c) => looksAlike(n, normalizeName(c.name)));
+  const strengthNumber = strength?.match(/\d+(?:\.\d+)?/)?.[0];
+  const keys = new Set([n, ...(strengthNumber && !n.endsWith(strengthNumber) ? [`${n} ${strengthNumber}`] : [])]);
+  const exactMatches = catalog.filter((c) => keys.has(normalizeName(c.name)));
+  const candidates = catalog.filter((c) => [...keys].some((k) => looksAlike(k, normalizeName(c.name))));
   // Two catalog rows with the same normalized name would be a data error: treat as not exact.
   return { exact: exactMatches.length === 1 ? exactMatches[0] : null, candidates };
 }
