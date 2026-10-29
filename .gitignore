@@ -1,0 +1,30 @@
+# dependencies / build
+node_modules/
+.next/
+out/
+build/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# secrets — never commit
+.env
+.env*.local
+.env.development
+.env.production
+*.pem
+
+# private health data — never commit
+data/private/
+
+# tooling
+.vercel
+.supabase/
+supabase/.temp/
+.DS_Store
+npm-debug.log*
+
+# generated service worker
+public/sw.js
+public/sw.js.map
+public/swe-worker*
