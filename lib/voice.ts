@@ -185,3 +185,151 @@ export function speak(text: string, speechLang: string): boolean {
   window.speechSynthesis.speak(u);
   return true;
 }
+
+// ---------------------------------------------------------------------------------------------
+// Sarvam AI voice (server): reliable Malayalam / Hindi / English on any phone.
+// One microphone stream feeds both the recorder and the waveform, so they never fight.
+// ---------------------------------------------------------------------------------------------
+
+/** Records one spoken question. `level` (0..1) drives the waveform while recording. */
+export function useRecorder() {
+  const level = useRef(0);
+  const [recording, setRecording] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const parts = useRef<{ rec: MediaRecorder; stream: MediaStream; ctx: AudioContext; raf: number; chunks: Blob[] } | null>(null);
+
+  const cleanup = () => {
+    const p = parts.current;
+    if (!p) return;
+    cancelAnimationFrame(p.raf);
+    p.stream.getTracks().forEach((t) => t.stop());
+    p.ctx.close().catch(() => {});
+    parts.current = null;
+    level.current = 0;
+  };
+
+  const start = useCallback(async () => {
+    setError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      // Phones differ: Chrome records webm/opus, iPhone records mp4. Both are accepted by the server.
+      const type = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"].find((t) => MediaRecorder.isTypeSupported(t));
+      const rec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+      const chunks: Blob[] = [];
+      rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+      const ctx = new AudioContext();
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      ctx.createMediaStreamSource(stream).connect(analyser);
+      const data = new Uint8Array(analyser.fftSize);
+      const loop = () => {
+        analyser.getByteTimeDomainData(data);
+        let sum = 0;
+        for (const v of data) sum += ((v - 128) / 128) ** 2;
+        level.current = level.current * 0.6 + Math.min(1, Math.sqrt(sum / data.length) * 4) * 0.4;
+        if (parts.current) parts.current.raf = requestAnimationFrame(loop);
+      };
+      parts.current = { rec, stream, ctx, raf: 0, chunks };
+      rec.start(250);
+      loop();
+      setRecording(true);
+      return true;
+    } catch {
+      cleanup();
+      setError("Microphone not available. Allow microphone access for this site, then try again.");
+      return false;
+    }
+  }, []);
+
+  /** Stops and returns the recording (null if nothing was recorded). */
+  const stop = useCallback(async (): Promise<Blob | null> => {
+    const p = parts.current;
+    if (!p) return null;
+    const done = new Promise<void>((resolve) => (p.rec.onstop = () => resolve()));
+    if (p.rec.state !== "inactive") p.rec.stop();
+    await done;
+    const blob = p.chunks.length ? new Blob(p.chunks, { type: p.rec.mimeType || "audio/webm" }) : null;
+    cleanup();
+    setRecording(false);
+    return blob;
+  }, []);
+
+  const cancel = useCallback(() => {
+    const p = parts.current;
+    if (p && p.rec.state !== "inactive") p.rec.stop();
+    cleanup();
+    setRecording(false);
+  }, []);
+
+  useEffect(() => () => cleanup(), []);
+
+  return { level, recording, error, start, stop, cancel };
+}
+
+/** Sends a recording to our server (Sarvam) and returns what was said. */
+export async function transcribe(audio: Blob, lang: string): Promise<string> {
+  const form = new FormData();
+  form.append("audio", audio, "speech");
+  form.append("lang", lang);
+  const res = await fetch("/api/voice/stt", { method: "POST", body: form });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error ?? "Couldn't understand the recording.");
+  return String(body.transcript ?? "");
+}
+
+// One audio element, unlocked by the user's tap, so replies can play after a network wait
+// (phones block sound that doesn't start from a tap).
+let player: HTMLAudioElement | null = null;
+/** A valid 0.05 s silent WAV, built in code (used only to "unlock" sound on the first tap). */
+function silentWav(): string {
+  const samples = 400;
+  const buf = new DataView(new ArrayBuffer(44 + samples * 2));
+  const text = (o: number, t: string) => [...t].forEach((c, i) => buf.setUint8(o + i, c.charCodeAt(0)));
+  text(0, "RIFF");
+  buf.setUint32(4, 36 + samples * 2, true);
+  text(8, "WAVEfmt ");
+  buf.setUint32(16, 16, true);
+  buf.setUint16(20, 1, true); // PCM
+  buf.setUint16(22, 1, true); // mono
+  buf.setUint32(24, 8000, true);
+  buf.setUint32(28, 16000, true);
+  buf.setUint16(32, 2, true);
+  buf.setUint16(34, 16, true);
+  text(36, "data");
+  buf.setUint32(40, samples * 2, true);
+  let bin = "";
+  new Uint8Array(buf.buffer).forEach((b) => (bin += String.fromCharCode(b)));
+  return `data:audio/wav;base64,${btoa(bin)}`;
+}
+
+/** Call at the start of a tap (before any await). */
+export function unlockAudio() {
+  if (typeof window === "undefined") return;
+  player ??= new Audio();
+  player.src = silentWav();
+  player.play().catch(() => {});
+}
+
+/**
+ * Reads text aloud: Sarvam voice first (works in Malayalam/Hindi on every phone),
+ * then the phone's own voice. Returns false if neither could speak.
+ */
+export async function sayAloud(text: string, lang: string, speechLang: string): Promise<boolean> {
+  try {
+    const res = await fetch("/api/voice/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, lang }) });
+    if (!res.ok) throw new Error("tts");
+    const url = URL.createObjectURL(await res.blob());
+    player ??= new Audio();
+    player.src = url;
+    player.onended = () => URL.revokeObjectURL(url);
+    await player.play();
+    return true;
+  } catch {
+    return speak(text, speechLang);
+  }
+}
+
+export function stopSpeaking() {
+  player?.pause();
+  if (typeof window !== "undefined") window.speechSynthesis?.cancel();
+}

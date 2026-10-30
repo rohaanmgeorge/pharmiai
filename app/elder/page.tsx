@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { Check, Mic, Settings, SkipForward } from "lucide-react";
+import { Check, Mic, Settings, SkipForward, Volume2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -11,6 +11,8 @@ import { ErrorCard, LoadingCards } from "@/components/states";
 import { api, newOpId } from "@/lib/api-client";
 import type { DoseState } from "@/lib/mock";
 import { patientQuery, useApi } from "@/lib/use-api";
+import { LANGS } from "@/lib/i18n";
+import { sayAloud, unlockAudio } from "@/lib/voice";
 
 type TodayData = { doses: DoseView[] };
 type Me = { me: { name: string } | null };
@@ -18,7 +20,7 @@ type Me = { me: { name: string } | null };
 // Elder mode home: one thing at a time, huge text, one Talk button, SOS always visible.
 export default function ElderHome() {
   const router = useRouter();
-  const { t, setElder } = usePrefs();
+  const { t, setElder, lang } = usePrefs();
   const [query] = useState(patientQuery);
   const { data, error, loading, reload, setData } = useApi<TodayData>(`/api/today${query}`);
   const { data: me } = useApi<Me>("/api/me");
@@ -91,6 +93,16 @@ export default function ElderHome() {
                       1 {dose.form.toLowerCase()} · {dose.time}
                     </div>
                     {dose.food && <div className="text-lg text-ink-2">{t(dose.food === "after" ? "afterFood" : "beforeFood")}</div>}
+                    <button
+                      onClick={() => {
+                        unlockAudio();
+                        const food = dose.food ? `, ${t(dose.food === "after" ? "afterFood" : "beforeFood")}` : "";
+                        sayAloud(`${t("nextMedicine")}: ${dose.name}, ${dose.time}${food}.`, lang, LANGS.find((l) => l.code === lang)!.speech);
+                      }}
+                      className="mt-2 inline-flex min-h-16 items-center gap-2 rounded-full bg-surface-2 px-5 text-lg font-bold"
+                    >
+                      <Volume2 className="size-6" aria-hidden /> Read aloud
+                    </button>
                   </div>
                 </div>
                 <motion.button

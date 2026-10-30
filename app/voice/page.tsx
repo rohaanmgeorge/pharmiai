@@ -9,7 +9,8 @@ import { askAgent, type AgentAnswer, type Turn } from "@/components/chat/ask-age
 import { usePrefs } from "@/components/providers";
 import { AiHeadline, cn, PillButton } from "@/components/ui";
 import { type Lang, LANGS } from "@/lib/i18n";
-import { speak, useMicLevel, useSpeechToText } from "@/lib/voice";
+import { api } from "@/lib/api-client";
+import { sayAloud, transcribe, unlockAudio, useMicLevel, useRecorder, useSpeechToText } from "@/lib/voice";
 
 const BARS = 28;
 
@@ -79,7 +80,19 @@ export default function VoicePage() {
   const [reply, setReply] = useState<AgentAnswer | null>(null);
   // This visit's conversation, in memory only (never saved): lets "yes" answer a confirm-back.
   const [history, setHistory] = useState<Turn[]>([]);
-  const mic = useMicLevel(phase === "listening");
+  // "sarvam" = server voice (works in Malayalam/Hindi on any phone); "browser" = the phone's own.
+  const [engine, setEngine] = useState<"sarvam" | "browser">("browser");
+  const [heard, setHeard] = useState("");
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const recorder = useRecorder();
+  const mic = useMicLevel(phase === "listening" && engine === "browser");
+  const level = engine === "sarvam" ? recorder.level : mic.level;
+
+  useEffect(() => {
+    api<{ sarvam: boolean }>("/api/voice/status")
+      .then((v) => setEngine(v.sarvam ? "sarvam" : "browser"))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (phase !== "listening") return;
@@ -87,12 +100,20 @@ export default function VoicePage() {
     return () => clearInterval(id);
   }, [phase]);
 
-  const begin = () => {
+  const begin = async () => {
+    unlockAudio(); // must happen inside the tap, so the spoken reply is allowed to play later
     setSeconds(0);
+    setHeard("");
+    setVoiceError(null);
+    if (engine === "sarvam") {
+      if (await recorder.start()) setPhase("listening");
+      return;
+    }
     setPhase("listening");
     stt.start();
   };
   const cancel = () => {
+    recorder.cancel();
     stt.cancel();
     setPhase("idle");
   };
@@ -110,10 +131,27 @@ export default function VoicePage() {
     setHistory((h) => [...h, { role: "user" as const, text }, { role: "model" as const, text: answer.speech }].slice(-10));
     setReply(answer);
     setPhase("reply");
-    setNoVoice(!speak(answer.speech, speechLang));
+    setNoVoice(!(await sayAloud(answer.speech, lang, speechLang)));
   }
 
-  const confirm = () => {
+  const confirm = async () => {
+    if (engine === "sarvam") {
+      const audio = await recorder.stop();
+      if (!audio) return setPhase("idle");
+      setPhase("thinking");
+      try {
+        const text = await transcribe(audio, lang);
+        setHeard(text);
+        if (!text) {
+          setVoiceError("I didn't catch that. Please tap the mic and try again.");
+          return setPhase("idle");
+        }
+        return ask(text);
+      } catch (e) {
+        setVoiceError((e as Error).message);
+        return setPhase("idle");
+      }
+    }
     stt.stop();
     ask(`${stt.finalText} ${stt.interim}`.trim());
   };
@@ -166,7 +204,12 @@ export default function VoicePage() {
                   {NO_VOICE[lang]}
                 </p>
               ) : (
-                <PillButton onClick={() => setNoVoice(!speak(reply?.speech ?? "", speechLang))}>
+                <PillButton
+                  onClick={async () => {
+                    unlockAudio();
+                    setNoVoice(!(await sayAloud(reply?.speech ?? "", lang, speechLang)));
+                  }}
+                >
                   <Volume2 className="size-4" aria-hidden /> Say it again
                 </PillButton>
               )}
@@ -180,9 +223,10 @@ export default function VoicePage() {
               className="text-[2.4rem] leading-tight font-light tracking-tight sm:text-[3rem]"
               aria-live="polite"
             >
-              {phase === "idle" && <span className="text-ink-2">Tap the mic and ask about your medicines</span>}
-              {phase === "thinking" && <span className="text-ink-2">Let me check…</span>}
-              {phase === "listening" && (
+              {phase === "idle" && <span className="text-ink-2">{voiceError ?? recorder.error ?? "Tap the mic and ask about your medicines"}</span>}
+              {phase === "thinking" && <span className="text-ink-2">{heard ? `“${heard}”` : "Let me check…"}</span>}
+              {phase === "listening" && engine === "sarvam" && <span className="text-ink-2">{t("listening")} Tap ✓ when you finish.</span>}
+              {phase === "listening" && engine === "browser" && (
                 <>
                   {words.map((w, i) => (
                     <motion.span key={`${i}-${w}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="text-ink">
@@ -198,7 +242,7 @@ export default function VoicePage() {
         </AnimatePresence>
       </div>
 
-      <Waveform level={mic.level} active={phase === "listening"} />
+      <Waveform level={level} active={phase === "listening"} />
 
       <div className="mt-6 flex items-center justify-center gap-8">
         <PillButton aria-label="Cancel" className="size-16 !p-0" onClick={cancel} disabled={phase === "idle"}>
@@ -230,7 +274,8 @@ export default function VoicePage() {
         {phase === "listening" ? timer : "00:00"}
       </div>
       <p className="mt-3 text-center text-xs text-ink-2">
-        {stt.supported ? (mic.real ? "Using your microphone" : "") : "Speech recognition not available in this browser — showing a demo."} {t("disclaimer")}
+        {engine === "sarvam" ? "Indian-language voice (Sarvam AI)." : stt.supported ? (mic.real ? "Using your microphone" : "") : "Speech recognition not available in this browser — showing a demo."}{" "}
+        {t("disclaimer")}
       </p>
     </main>
   );
