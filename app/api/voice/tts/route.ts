@@ -1,6 +1,7 @@
 import { fail, requireUser } from "@/lib/server/auth";
 import { voiceReady, textToSpeech } from "@/lib/server/gemini-voice";
 import type { Lang } from "@/lib/i18n";
+import { describeAiError } from "@/lib/ai/errors";
 
 export const maxDuration = 30;
 
@@ -16,7 +17,8 @@ export async function POST(request: Request) {
   try {
     const audio = await textToSpeech(text, lang);
     return new Response(new Uint8Array(audio), { headers: { "content-type": "audio/wav", "cache-control": "private, max-age=3600" } });
-  } catch {
-    return fail("Voice service is busy. Showing the answer on screen.", 502);
+  } catch (e) {
+    const problem = describeAiError(e);
+    return Response.json({ error: `${problem.message} Showing the answer on screen.`, kind: problem.kind }, { status: problem.status });
   }
 }

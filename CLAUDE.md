@@ -25,7 +25,11 @@ Mobile-first PWA medicine care assistant (hackathon prototype, fictional data). 
 - `npm run eval` — prescription evaluation over `data/private/` (metric: wrong-but-Verified must be 0)
 - `npx supabase db push` — apply migrations
 
-## Zero-Guess rules (never weaken)
+## Verification (changed 2026-10-30, team decision)
+- Scans are **Verified automatically** (`verified_by = 'ai'`) by `lib/safety/auto-verify.ts`: reading 1 first, closest saved name if no exact match; nothing is invented (missing timing → no reminder until chosen; missing days → 90-day reminders). Differences go into `ai_notes`, shown on the review screen. A line matching no medicine is "Unreadable line – not added".
+- Gemini errors are turned into plain messages by `lib/ai/errors.ts` (daily limit with wait time, busy, overloaded, timeout).
+
+## Zero-Guess rules (original design; partly replaced by the section above)
 - Status is decided only by `lib/safety/status.ts` `computeStatus()` + DB RPC `confirm_item()`; the LLM never sets status.
 - Schedules, reminders, medicine info, and prices exist only for `verified` items — enforced by DB trigger `require_verified`, not just UI.
 - Facts about a specific medicine, prices, generics, and shorthand come from DB tables (cards). The assistant may give *general* health information in its own words (companion mode, decided 2026-10-30), shown with a "General information from AI" label; `guardReply(..., question)` still blocks personal dose instructions, diagnoses, unknown amounts, and naming a pill described by its look. Danger signs always show SOS (rule in `lib/agent/run.ts`).

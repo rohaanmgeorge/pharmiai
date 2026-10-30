@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { identifyMedicines } from "@/lib/ai/identify-medicine";
 import { fail, requireUser } from "@/lib/server/auth";
 import { cityOf, saveIdentified } from "@/lib/server/catalog";
+import { describeAiError } from "@/lib/ai/errors";
 
 export const maxDuration = 30;
 
@@ -20,7 +21,8 @@ export async function POST(request: Request) {
     if (!saved.length) return NextResponse.json({ results: [], message: "Gemini could not identify this as a medicine sold in India. Check the spelling on the strip." });
     const { data } = await supabase.from("medicine_catalog").select("id, name, ingredients, strength, form, manufacturer, reviewed").in("id", saved.map((s) => s.id));
     return NextResponse.json({ results: data ?? [] });
-  } catch {
-    return fail("The AI is busy right now. Please try again in a minute.", 503);
+  } catch (e) {
+    const problem = describeAiError(e);
+    return NextResponse.json({ error: problem.message, kind: problem.kind }, { status: problem.status });
   }
 }

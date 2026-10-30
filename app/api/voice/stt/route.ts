@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { fail, requireUser } from "@/lib/server/auth";
 import { voiceReady, speechToText } from "@/lib/server/gemini-voice";
 import type { Lang } from "@/lib/i18n";
+import { describeAiError } from "@/lib/ai/errors";
 
 export const maxDuration = 30;
 const MAX_BYTES = 3 * 1024 * 1024; // ~30 s of speech is far smaller than this
@@ -18,7 +19,8 @@ export async function POST(request: Request) {
   if (audio.size > MAX_BYTES) return fail("Recording is too long. Please keep it under 30 seconds.");
   try {
     return NextResponse.json({ transcript: await speechToText(audio, lang) });
-  } catch {
-    return fail("Couldn't understand the recording. Please try again.", 502);
+  } catch (e) {
+    const problem = describeAiError(e);
+    return NextResponse.json({ error: problem.message, kind: problem.kind }, { status: problem.status });
   }
 }

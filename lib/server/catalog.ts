@@ -1,5 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { type AiProblem, describeAiError } from "@/lib/ai/errors";
 import { identifyMedicines, type Identified } from "@/lib/ai/identify-medicine";
 import { type CatalogEntry, matchName, normalizeName } from "@/lib/safety/match";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -91,8 +92,8 @@ export async function saveIdentified(found: Identified[], city: string | null): 
  * Makes sure every name read on a prescription/strip is in the saved list, asking Gemini for the
  * ones that aren't. If the AI is unavailable, nothing is added (those lines stay "Needs check").
  */
-export async function identifyMissing(supabase: SupabaseClient, readings: Named[], city: string | null): Promise<void> {
-  if (!process.env.GEMINI_API_KEY) return;
+export async function identifyMissing(supabase: SupabaseClient, readings: Named[], city: string | null): Promise<AiProblem | null> {
+  if (!process.env.GEMINI_API_KEY) return describeAiError(new Error("no key"));
   const cached = await catalogCandidates(supabase, readings);
   const ask = new Set<string>();
   for (const r of readings) {
@@ -100,10 +101,13 @@ export async function identifyMissing(supabase: SupabaseClient, readings: Named[
     // Send the strength along when it was written apart from the name ("Dolo" + "650 mg").
     ask.add(r.strength && !/\d/.test(r.name) ? `${r.name} ${r.strength}` : r.name);
   }
-  if (!ask.size) return;
+  if (!ask.size) return null;
   try {
     await saveIdentified(await identifyMedicines([...ask], city), city);
-  } catch {
-    console.error("identify: AI unavailable");
+    return null;
+  } catch (e) {
+    const problem = describeAiError(e);
+    console.error(`identify: AI unavailable (${problem.kind})`);
+    return problem;
   }
 }

@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 import { stripReadingA, stripReadingB } from "@/lib/ai/read-strip";
 import { safetyLog } from "@/lib/safety/log";
 import type { CatalogEntry } from "@/lib/safety/match";
-import { computeStripStatus, expiryBadge, formatExpiry, type StripReading } from "@/lib/safety/strip";
+import { computeStripStatus, parseExpiry, expiryBadge, formatExpiry, type StripReading } from "@/lib/safety/strip";
 import { canManage, canView, fail, requireUser } from "@/lib/server/auth";
 import { istDate } from "@/lib/server/time";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { catalogCandidates, cityOf, identifyMissing } from "@/lib/server/catalog";
+import { describeAiError } from "@/lib/ai/errors";
+import { autoVerify } from "@/lib/safety/auto-verify";
 
 export const maxDuration = 60; // two AI readings can take a while
 
@@ -37,14 +39,29 @@ export async function POST(request: Request) {
   // 2. Two blind readings in parallel. A failed reading is simply missing → stays "Needs check".
   const image = { data: bytes.toString("base64"), mimeType: file.type };
   const [resA, resB] = await Promise.allSettled([stripReadingA(image), stripReadingB(image)]);
+  if (resA.status === "rejected" && resB.status === "rejected") {
+    // Both failed (e.g. daily AI limit): remove the photo and say exactly why.
+    const problem = describeAiError(resA.reason);
+    await supabase.storage.from("rx-images").remove([path]);
+    return NextResponse.json({ error: problem.message, kind: problem.kind }, { status: problem.status });
+  }
   const a: StripReading | null = resA.status === "fulfilled" ? resA.value.reading : null;
   const b: StripReading | null = resB.status === "fulfilled" ? resB.value.reading : null;
 
-  // 3. Zero-Guess status (code decides, not the AI). No confirmation yet → never Verified here.
+  // 3. Status is decided in code, not by the AI.
   const named = [a, b].map((r) => r && { name: r.brand, strength: r.strength });
-  await identifyMissing(supabase, named, await cityOf(supabase, patientId));
+  const problem = await identifyMissing(supabase, named, await cityOf(supabase, patientId));
   const catalog = await catalogCandidates(supabase, named);
   const result = computeStripStatus({ a, b, catalog: (catalog ?? []) as CatalogEntry[] });
+  // Verified automatically (team decision): the medicine named on the strip (reading 1 first) and
+  // the expiry printed on it. Notes record anything that differed.
+  const auto = autoVerify({ a: a && { name: a.brand, strength: a.strength, doseCode: null, durationDays: null }, b: b && { name: b.brand, strength: b.strength, doseCode: null, durationDays: null }, catalog });
+  const expiry = result.expiryRead ?? parseExpiry(a?.expiry) ?? parseExpiry(b?.expiry);
+  const notes = [
+    ...auto.notes.filter((n) => !/timing|days/.test(n)), // a strip has no dose or days
+    ...(expiry ? [] : ["The expiry date could not be read. Add it by hand."]),
+    ...(auto.status === "not_recognized" && problem ? [`Couldn't identify this medicine: ${problem.message}`] : []),
+  ];
 
   const { data: strip, error } = await supabaseAdmin()
     .from("strips")
@@ -54,11 +71,13 @@ export async function POST(request: Request) {
       image_path: path,
       reading_a: a,
       reading_b: b,
-      catalog_id: result.catalogId, // only when both readings agreed
-      candidates: result.candidates.map((c) => ({ id: c.id, name: c.name, strength: c.strength, ingredients: c.ingredients })),
-      status: result.status,
-      reasons: result.reasons,
-      expiry_read: result.expiryRead,
+      catalog_id: auto.catalogId,
+      candidates: auto.candidates.map((c) => ({ id: c.id, name: c.name, strength: c.strength, ingredients: c.ingredients })),
+      status: auto.status,
+      verified_by: "ai",
+      reasons: notes,
+      expiry_read: expiry,
+      expiry_month: auto.status === "verified" && expiry ? `${expiry}-01` : null,
       batch: result.batchRead,
     })
     .select("id, status")
@@ -71,7 +90,7 @@ export async function POST(request: Request) {
     { actor: user.id, patientId, event: "strip_status_computed", payload: { strip: strip.id, status: strip.status, expiryAgreed: Boolean(result.expiryRead) } },
   ]);
 
-  return NextResponse.json({ stripId: strip.id, count: 1, needsCheck: strip.status === "needs_check" ? 1 : 0 });
+  return NextResponse.json({ stripId: strip.id, count: 1, needsCheck: 0 });
 }
 
 type ListRow = {

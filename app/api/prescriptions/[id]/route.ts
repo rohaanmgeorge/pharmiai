@@ -18,7 +18,7 @@ export async function GET(request: Request, ctx: RouteContext<"/api/prescription
 
   const { data: items } = await supabase
     .from("prescription_items")
-    .select("id, text_a, text_b, catalog_id, candidates, strength, dose_code, duration_days, food, status, reasons, confirmed_at")
+    .select("id, text_a, text_b, catalog_id, candidates, strength, dose_code, duration_days, food, status, reasons, confirmed_at, verified_by, ai_notes")
     .eq("prescription_id", id)
     .order("created_at");
 

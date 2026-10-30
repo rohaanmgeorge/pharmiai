@@ -8,6 +8,7 @@ import { safetyLog } from "@/lib/safety/log";
 import { canView, fail, requireUser } from "@/lib/server/auth";
 import { catalogNamesIn } from "@/lib/server/catalog";
 import { infoTools } from "@/lib/agent/info-tools";
+import { describeAiError } from "@/lib/ai/errors";
 
 // POST /api/agent  { text, lang, patientId?, history?, pending? } → { speech, cards }
 // history: the last few turns ({ role: "user" | "model", text }) so the AI keeps context.
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
 
   // Save both sides of the exchange (private to this user), then answer. A failed save never
   // blocks the reply — history is a convenience.
-  const reply = async (answer: { speech: string; cards: unknown[]; general?: boolean }) => {
+  const reply = async (answer: { speech: string; cards: unknown[]; general?: boolean; aiProblem?: string }) => {
     const { error } = await supabase.from("chat_messages").insert([
       // Both rows need the same fields: in a two-row insert, a missing field becomes null, not its default.
       { user_id: user.id, patient_id: patientId, role: "user", text, cards: [], general: false, lang },
@@ -85,8 +86,12 @@ export async function POST(request: Request) {
         );
       }
       return reply({ speech: out.speech, cards: out.cards, general: out.general ?? false });
-    } catch {
-      console.error("agent: AI unavailable, using keyword fallback");
+    } catch (e) {
+      // Say why the AI didn't answer (daily limit, busy…), then still help with the basics.
+      const problem = describeAiError(e);
+      console.error(`agent: AI unavailable (${problem.kind}), using keyword fallback`);
+      const basic = await fallbackReply(ctx, text);
+      return reply({ speech: `${problem.message} ${basic.speech}`, cards: basic.cards, aiProblem: problem.kind });
     }
   }
   return reply(await fallbackReply(ctx, text));

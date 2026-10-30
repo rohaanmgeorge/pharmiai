@@ -2,9 +2,8 @@ import { NextResponse } from "next/server";
 import { readingA, readingB, type ReadItem } from "@/lib/ai/read-prescription";
 import { alignReadings } from "@/lib/safety/align";
 import { safetyLog } from "@/lib/safety/log";
-import type { CatalogEntry } from "@/lib/safety/match";
-import { normalizeCode } from "@/lib/safety/shorthand";
-import { computeStatus } from "@/lib/safety/status";
+import { autoVerify } from "@/lib/safety/auto-verify";
+import { describeAiError } from "@/lib/ai/errors";
 import { requireUser } from "@/lib/server/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { catalogCandidates, cityOf, identifyMissing } from "@/lib/server/catalog";
@@ -44,9 +43,16 @@ export async function POST(request: Request) {
     .single();
   if (rxError || !rx) return NextResponse.json({ error: "Could not save the prescription" }, { status: 500 });
 
-  // 2. Two independent readings, in parallel. A failed reading is simply missing → items stay "Needs check".
+  // 2. Two independent readings, in parallel. One failed reading is fine (the other is used).
   const image = { data: bytes.toString("base64"), mimeType: file.type };
   const [resA, resB] = await Promise.allSettled([readingA(image), readingB(image)]);
+  if (resA.status === "rejected" && resB.status === "rejected") {
+    // Both failed (e.g. daily AI limit): remove the half-saved scan and say exactly why.
+    const problem = describeAiError(resA.reason);
+    await supabaseAdmin().from("prescriptions").delete().eq("id", rx.id);
+    await supabase.storage.from("rx-images").remove([path]);
+    return NextResponse.json({ error: problem.message, kind: problem.kind }, { status: problem.status });
+  }
   const itemsA: ReadItem[] = resA.status === "fulfilled" ? resA.value.items : [];
   const itemsB: ReadItem[] = resB.status === "fulfilled" ? resB.value.items : [];
 
@@ -59,14 +65,16 @@ export async function POST(request: Request) {
     { prescription_id: rx.id, engine: "gemini_b", raw: resB.status === "fulfilled" ? { model: resB.value.model, items: itemsB } : { error: "failed" } },
   ]);
 
-  // 3. Zero-Guess status for every medicine line (code decides, not the AI).
+  // 3. Status for every medicine line (code decides, not the AI): Verified automatically when the
+  // line names a medicine (team decision), with notes about anything that differed.
   // Names not yet in our saved list are identified by Gemini first (then saved for next time).
-  await identifyMissing(supabase, [...itemsA, ...itemsB], await cityOf(supabase, patientId));
+  const problem = await identifyMissing(supabase, [...itemsA, ...itemsB], await cityOf(supabase, patientId));
   const catalog = await catalogCandidates(supabase, [...itemsA, ...itemsB]);
   const pairs = alignReadings(itemsA, itemsB);
   const rows = pairs.map(({ a, b }) => {
-    const result = computeStatus({ a, b, catalog: (catalog ?? []) as CatalogEntry[] });
-    const code = a?.doseCode ?? b?.doseCode ?? null;
+    const result = autoVerify({ a, b, catalog });
+    // If the AI was unavailable, say that instead of "could not be read".
+    const notes = result.status === "not_recognized" && problem ? [`Couldn't identify this medicine: ${problem.message}`] : result.notes;
     return {
       prescription_id: rx.id,
       patient_id: patientId,
@@ -74,12 +82,14 @@ export async function POST(request: Request) {
       text_b: b?.name ?? null,
       catalog_id: result.catalogId,
       candidates: result.candidates.map((c) => ({ id: c.id, name: c.name, strength: c.strength, ingredients: c.ingredients })),
-      strength: a?.strength ?? b?.strength ?? null,
-      dose_code: code ? normalizeCode(code) : null,
-      duration_days: a?.durationDays ?? b?.durationDays ?? null,
+      strength: result.strength,
+      dose_code: result.doseCode,
+      duration_days: result.durationDays,
       food: a?.food ?? b?.food ?? null,
-      status: result.status, // never "verified" here: a person has not confirmed yet
-      reasons: result.reasons,
+      status: result.status,
+      verified_by: "ai",
+      ai_notes: notes,
+      reasons: notes,
       reading_a: a, // kept so the confirm step can re-check against both readings
       reading_b: b,
     };
@@ -94,5 +104,10 @@ export async function POST(request: Request) {
     ...(saved ?? []).map((s) => ({ actor: user.id, patientId, itemId: s.id, event: "status_computed", payload: { status: s.status } })),
   ]);
 
-  return NextResponse.json({ prescriptionId: rx.id, count: rows.length, needsCheck: rows.filter((r) => r.status !== "not_recognized").length });
+  return NextResponse.json({
+    prescriptionId: rx.id,
+    count: rows.filter((r) => r.status === "verified").length,
+    needsCheck: 0,
+    warning: problem && rows.some((r) => r.status === "not_recognized") ? problem.message : undefined,
+  });
 }

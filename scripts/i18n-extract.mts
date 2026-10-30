@@ -8,7 +8,8 @@ import { join } from "node:path";
 import ts from "typescript";
 
 const ROOTS = ["app", "components", "lib"];
-const SKIP_FILES = /(\/lib\/mock\.ts|\/lib\/i18n|\.test\.ts|\/lib\/server\/messages\.ts|\/lib\/agent\/run\.ts|\/lib\/ai\/)/;
+// AI prompts are not screen text; lib/ai/errors.ts IS (messages shown to people), so it is included.
+const SKIP_FILES = /(\/lib\/mock\.ts|\/lib\/i18n|\.test\.ts|\/lib\/server\/messages\.ts|\/lib\/agent\/run\.ts|\/lib\/ai\/(?!errors))/;
 // Attributes that hold visible or spoken text; every other attribute (className, href…) is code.
 const TEXT_ATTRS = new Set(["placeholder", "aria-label", "title", "alt", "label", "description", "body", "subtitle", "sub"]);
 const CODE_ATTRS = new Set(["className", "href", "src", "key", "id", "type", "name", "role", "rel", "target", "method", "accept", "inputMode", "autoComplete", "layoutId", "variant", "size", "tone", "kind", "lang", "dir", "htmlFor", "mode", "fill", "stroke", "d", "viewBox", "xmlns", "transform", "strokeLinecap", "strokeLinejoin"]);

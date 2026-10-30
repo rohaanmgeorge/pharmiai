@@ -27,7 +27,10 @@ type Item = {
   food: "before" | "after" | null;
   status: Status;
   reasons: string[];
+  verified_by?: "person" | "ai";
+  ai_notes?: string[];
 };
+type Fill = { doseCode?: string; durationDays?: string };
 type ReviewData = {
   prescription: { id: string; patient_id: string; state: string; doctor_name: string | null; doctor_read: string | null; photoUrl: string | null };
   items: Item[];
@@ -58,6 +61,114 @@ function ReadValue({ label, value, onType, placeholder, inputMode }: { label: st
         />
       )}
     </div>
+  );
+}
+
+// Timing choices for a line where no timing was written (fixed shorthand table only).
+const DOSE_CHOICES = ["1-0-0", "0-0-1", "1-0-1", "1-1-1", "OD", "BD", "TDS", "HS"];
+
+/** A line the app could not read as a medicine (e.g. a smudge or signature). */
+function UnreadableLine({ item }: { item: Item }) {
+  return (
+    <div className="rounded-card bg-white/70 p-4 shadow-card">
+      <div className="flex items-center justify-between gap-3">
+        <span className="min-w-0 truncate font-bold text-ink-2">{item.text_a ?? item.text_b ?? "Unreadable line"}</span>
+        <span className="shrink-0 rounded-full bg-surface-2 px-3 py-1 text-xs font-bold text-ink-2">Unreadable line – not added</span>
+      </div>
+      {(item.ai_notes ?? item.reasons).map((n) => (
+        <p key={n} className="mt-2 text-sm text-ink-2">
+          {n}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+/** Verified automatically by the scan: shows what was read, notes, and asks only for missing timing/days. */
+function AutoItem({ item, fill, onFill }: { item: Item; fill: Fill; onFill: (f: Fill) => void }) {
+  const { t } = usePrefs();
+  const name = item.candidates.find((c) => c.id === item.catalog_id)?.name ?? item.text_a ?? item.text_b ?? "";
+  const notes = item.ai_notes ?? [];
+  return (
+    <ExpandableCard
+      defaultOpen={notes.length > 0 || !item.dose_code}
+      header={
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-lg font-bold">{name}</div>
+            <div className="truncate text-sm text-ink-2">
+              {item.dose_code ? `${doseLabel(item.dose_code)} · ` : ""}
+              {item.duration_days ? `${item.duration_days} days` : "no end date"}
+            </div>
+          </div>
+          <span className="flex shrink-0 items-center gap-1">
+            <StatusBadge status="verified" layoutId={`badge-${item.id}`} />
+            {item.verified_by === "ai" && <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[0.65rem] font-bold text-ink-2">AI</span>}
+          </span>
+        </div>
+      }
+    >
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <div className="rounded-sm bg-surface-2 p-3">
+            <div className="flex items-center gap-1 text-xs font-bold text-ink-2">
+              <Eye className="size-3.5" aria-hidden /> Reading 1
+            </div>
+            <div className="font-semibold">{item.text_a ?? "—"}</div>
+          </div>
+          <div className="rounded-sm bg-surface-2 p-3">
+            <div className="flex items-center gap-1 text-xs font-bold text-ink-2">
+              <Layers className="size-3.5" aria-hidden /> Reading 2
+            </div>
+            <div className="font-semibold">{item.text_b ?? "—"}</div>
+          </div>
+        </div>
+        {notes.length > 0 && (
+          <ul className="space-y-1 rounded-sm bg-lime-300/30 p-3 text-sm">
+            {notes.map((n) => (
+              <li key={n} className="flex items-start gap-2">
+                <CircleHelp className="mt-0.5 size-4 shrink-0 text-green-700" aria-hidden /> {n}
+              </li>
+            ))}
+          </ul>
+        )}
+        {!item.dose_code && (
+          <label className="block">
+            <span className="mb-1 block text-sm font-bold">When to take it (as the doctor said)</span>
+            <select
+              value={fill.doseCode ?? ""}
+              onChange={(e) => onFill({ ...fill, doseCode: e.target.value || undefined })}
+              className="min-h-12 w-full rounded-sm border border-line bg-white px-3 font-semibold"
+            >
+              <option value="">No reminder</option>
+              {DOSE_CHOICES.map((c) => (
+                <option key={c} value={c}>
+                  {doseLabel(c)}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {!item.duration_days && (
+          <label className="block">
+            <span className="mb-1 block text-sm font-bold">Number of days (leave empty for 90)</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={365}
+              value={fill.durationDays ?? ""}
+              onChange={(e) => onFill({ ...fill, durationDays: e.target.value })}
+              className="min-h-12 w-full rounded-sm border border-line bg-white px-3 font-semibold"
+            />
+          </label>
+        )}
+        <div className="rounded-sm bg-surface-2 p-3 text-sm">
+          <span className="text-xs font-bold text-ink-2">Food: </span>
+          <span className="font-bold">{item.food ? t(item.food === "after" ? "afterFood" : "beforeFood") : "Not written"}</span>
+        </div>
+      </div>
+    </ExpandableCard>
   );
 }
 
@@ -231,6 +342,7 @@ export default function ReviewPage() {
   const id = useClientValue(() => new URLSearchParams(window.location.search).get("id"), null);
   const { data, error, loading, reload, setData } = useApi<ReviewData>(id ? `/api/prescriptions/${id}` : null);
   const [stock, setStock] = useState<Record<string, string>>({});
+  const [fill, setFill] = useState<Record<string, Fill>>({});
   const [approving, setApproving] = useState(false);
   const [approveError, setApproveError] = useState<string | null>(null);
 
@@ -262,8 +374,8 @@ export default function ReviewPage() {
     setApproving(true);
     setApproveError(null);
     try {
-      const body = Object.fromEntries(verifiedItems.map((i) => [i.id, Number(stock[i.id] ?? defaultStock(i))]));
-      await api(`/api/prescriptions/${data!.prescription.id}/approve`, { method: "POST", json: { stock: body } });
+      const body = Object.fromEntries(verifiedItems.map((i) => [i.id, Number(stock[i.id] ?? defaultStock(i, fill[i.id]))]));
+      await api(`/api/prescriptions/${data!.prescription.id}/approve`, { method: "POST", json: { stock: body, fill } });
       router.push("/today");
     } catch (e) {
       setApproveError((e as Error).message);
@@ -290,8 +402,8 @@ export default function ReviewPage() {
 
         <div className="my-6 flex flex-wrap justify-center gap-2">
           <span className="rounded-full bg-ok-soft px-3 py-1.5 text-sm font-bold text-ok">{count("verified")} verified</span>
-          <span className="rounded-full bg-warn-soft px-3 py-1.5 text-sm font-bold text-warn">{count("needs_check")} need check</span>
-          <span className="rounded-full bg-surface-2 px-3 py-1.5 text-sm font-bold text-ink-2">{count("not_recognized")} not recognized</span>
+          {count("needs_check") > 0 && <span className="rounded-full bg-warn-soft px-3 py-1.5 text-sm font-bold text-warn">{count("needs_check")} need check</span>}
+          {count("not_recognized") > 0 && <span className="rounded-full bg-surface-2 px-3 py-1.5 text-sm font-bold text-ink-2">{count("not_recognized")} unreadable</span>}
         </div>
 
         {photo && (
@@ -312,14 +424,20 @@ export default function ReviewPage() {
         ))}
 
         <motion.div layout className="space-y-3">
-          {items.map((item) => (
+          {items.map((item) =>
+            item.status === "not_recognized" ? (
+              <UnreadableLine key={item.id} item={item} />
+            ) : item.status === "verified" && item.verified_by === "ai" ? (
+              <AutoItem key={item.id} item={item} fill={fill[item.id] ?? {}} onFill={(f) => setFill((x) => ({ ...x, [item.id]: f }))} />
+            ) : (
             <ItemCard
               key={item.id}
               item={item}
               canManage={data.canManage}
               onChange={(next) => setData((d) => d && { ...d, items: d.items.map((i) => (i.id === next.id ? next : i)) })}
             />
-          ))}
+            ),
+          )}
         </motion.div>
 
         {verifiedItems.length > 0 && data.prescription.state !== "approved" && data.canManage && (
@@ -335,7 +453,7 @@ export default function ReviewPage() {
                     min={0}
                     max={1000}
                     inputMode="numeric"
-                    value={stock[i.id] ?? String(defaultStock(i))}
+                    value={stock[i.id] ?? String(defaultStock(i, fill[i.id]))}
                     onChange={(e) => setStock((s) => ({ ...s, [i.id]: e.target.value }))}
                     className="w-24 rounded-sm bg-surface-2 px-3 py-2 text-right font-bold"
                   />
@@ -365,7 +483,7 @@ export default function ReviewPage() {
 }
 
 /** Suggested count = tablets for the whole course. Shown for the person to correct, never used silently. */
-function defaultStock(i: Item) {
-  const perDay = expandShorthand(i.dose_code)?.timesPerDay ?? 0;
-  return perDay * (i.duration_days ?? 0);
+function defaultStock(i: Item, f?: Fill) {
+  const perDay = expandShorthand(i.dose_code ?? f?.doseCode)?.timesPerDay ?? 0;
+  return perDay * (i.duration_days ?? (Number(f?.durationDays) || 0));
 }
