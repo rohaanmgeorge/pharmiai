@@ -88,10 +88,12 @@ export default function VoicePage() {
   const mic = useMicLevel(phase === "listening" && engine === "browser");
   const level = engine === "sarvam" ? recorder.level : mic.level;
 
+  const [ready, setReady] = useState(false);
   useEffect(() => {
     api<{ sarvam: boolean }>("/api/voice/status")
       .then((v) => setEngine(v.sarvam ? "sarvam" : "browser"))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setReady(true));
   }, []);
 
   useEffect(() => {
@@ -112,6 +114,16 @@ export default function VoicePage() {
     setPhase("listening");
     stt.start();
   };
+  // Opened from a Siri Shortcut ("Hey Siri, Pharmi") as /voice?listen=1: start listening right away.
+  // If the phone needs a tap first, the mic button is still there.
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!ready || autoStarted.current) return;
+    if (new URLSearchParams(window.location.search).get("listen") !== "1") return;
+    autoStarted.current = true;
+    setTimeout(begin, 0); // after this render, like a tap (runs once: autoStarted)
+  });
+
   const cancel = () => {
     recorder.cancel();
     stt.cancel();

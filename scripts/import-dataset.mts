@@ -25,30 +25,41 @@ if (!brandsPath && !genericsPath) {
   process.exit(1);
 }
 
-/** CSV parser: quoted fields with commas, newlines and "" escapes. */
-function parseCsv(text: string): Record<string, string>[] {
-  const rows: string[][] = [];
-  let row: string[] = [], field = "", quoted = false;
+/**
+ * CSV reader that yields one row at a time (the brand file is ~350 MB, so we never hold all rows).
+ * Handles quoted fields with commas, newlines and "" escapes. Long fields are cut to 2,000 chars.
+ */
+function* readCsv(text: string): Generator<Record<string, string>> {
+  let header: string[] | null = null;
+  let row: string[] = [];
+  let field = "";
+  let quoted = false;
+  const finishRow = function* () {
+    row.push(field.slice(0, 2000));
+    field = "";
+    if (row.some((f) => f.trim())) {
+      if (!header) header = row.map((h) => h.replace(/^\uFEFF/, "").trim().toLowerCase());
+      else {
+        const h = header;
+        yield Object.fromEntries(h.map((k, i) => [k, (row[i] ?? "").trim()]));
+      }
+    }
+    row = [];
+  };
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
     if (quoted) {
       if (c === '"' && text[i + 1] === '"') { field += '"'; i++; }
       else if (c === '"') quoted = false;
-      else field += c;
+      else if (field.length < 2000) field += c;
     } else if (c === '"') quoted = true;
-    else if (c === ",") { row.push(field); field = ""; }
+    else if (c === ",") { row.push(field.slice(0, 2000)); field = ""; }
     else if (c === "\n" || c === "\r") {
       if (c === "\r" && text[i + 1] === "\n") i++;
-      row.push(field); field = "";
-      if (row.some((f) => f.trim())) rows.push(row);
-      row = [];
-    } else field += c;
+      yield* finishRow();
+    } else if (field.length < 2000) field += c;
   }
-  row.push(field);
-  if (row.some((f) => f.trim())) rows.push(row);
-  const [header, ...data] = rows;
-  const keys = header.map((h) => h.replace(/^﻿/, "").trim().toLowerCase());
-  return data.map((r) => Object.fromEntries(keys.map((k, i) => [k, (r[i] ?? "").trim()])));
+  yield* finishRow();
 }
 
 /** First column that exists among several possible names. */
@@ -73,16 +84,19 @@ const packCount = (s: string) => {
  * "Metformin 500mg" → [metformin], "500 mg". Unknown shapes → null (row skipped, never guessed).
  */
 function parseComposition(raw: string): { ingredients: string[]; strength: string } | null {
-  const parts = raw.split(/\s*\+\s*/).filter(Boolean);
+  // Combinations are written "A (500mg) + B (125mg)" in brand data and "A 100mg and B 325mg" in Jan Aushadhi.
+  const parts = raw.split(/\s*\+\s*|\s+and\s+|\s*&\s*/i).filter(Boolean);
   const ingredients: string[] = [];
   const strengths: string[] = [];
   for (const p of parts) {
-    const m = p.match(/^(.*?)[\s(]*([\d.]+)\s*(mg|mcg|µg|g|ml|iu|%|w\/w|w\/v)\b/i);
+    // Units as written in Indian data: mg, mcg, g / gm, ml, IU, and "1% w/w" for creams.
+    const m = p.match(/^(.*?)[\s(]*([\d.]+)\s*(mcg|µg|mg|gm|g|ml|iu|%)(\s*w\/[wv])?(?![a-z])/i);
     if (!m) return null;
     const name = m[1].replace(/[()]/g, "").trim().toLowerCase();
     if (!name) return null;
     ingredients.push(name);
-    strengths.push(`${m[2]} ${m[3].toLowerCase()}`);
+    const unit = m[3].toLowerCase() === "gm" ? "g" : m[3].toLowerCase();
+    strengths.push(`${m[2]} ${unit}${m[4] ? m[4].replace(/\s+/g, " ").toLowerCase() : ""}`);
   }
   return ingredients.length ? { ingredients, strength: strengths.join(" + ") } : null;
 }
@@ -99,8 +113,7 @@ async function upsertInBatches(table: string, rows: Record<string, unknown>[], o
 }
 
 if (brandsPath) {
-  const data = parseCsv(readFileSync(brandsPath, "utf8"));
-  console.log(`Read ${data.length} rows. Columns: ${Object.keys(data[0] ?? {}).join(", ")}`);
+  const data = readCsv(readFileSync(brandsPath, "utf8"));
 
   // Existing names (hand-checked + demo) always win; we never overwrite them.
   const existing = new Set<string>();
@@ -110,10 +123,14 @@ if (brandsPath) {
     if (!page || page.length < 1000) break;
   }
 
-  const seen = new Map<string, number>(); // normalised name → how many rows have it
+  // normalised name → the different (ingredients|strength) it was listed with. The dataset repeats
+  // each product many times; repeats are fine, but one name with two compositions is a conflict.
+  const seen = new Map<string, Set<string>>();
   const candidates: Record<string, unknown>[] = [];
   const skipped = { discontinued: 0, noComposition: 0, existing: 0 };
+  let total = 0;
   for (const r of data) {
+    total++;
     const name = pick(r, "name", "product_name", "brand", "brand_name", "medicine name", "medicine_name", "drug_name");
     if (!name) continue;
     if (/^(true|1|yes)$/i.test(pick(r, "is_discontinued", "discontinued"))) { skipped.discontinued++; continue; }
@@ -123,7 +140,8 @@ if (brandsPath) {
     const key = norm(name);
     if (!key) continue;
     if (existing.has(key)) { skipped.existing++; continue; }
-    seen.set(key, (seen.get(key) ?? 0) + 1);
+    if (!seen.has(key)) seen.set(key, new Set());
+    seen.get(key)!.add(`${comp.ingredients.join("+")}|${comp.strength}`);
     candidates.push({
       key,
       row: {
@@ -145,20 +163,19 @@ if (brandsPath) {
       },
     });
   }
-  // A name that appears twice (e.g. two makers) is ambiguous: keep neither.
+  // A name listed with two different compositions is ambiguous: keep neither.
   const ids = new Set<string>();
   const rows = candidates
-    .filter((c) => seen.get(c.key as string) === 1)
+    .filter((c) => seen.get(c.key as string)!.size === 1)
     .map((c) => c.row as Record<string, unknown>)
     .filter((r) => !ids.has(r.id as string) && ids.add(r.id as string)); // one row per id
-  const ambiguous = candidates.length - rows.length;
-  console.log(`Brands to import: ${rows.length}. Skipped: ${skipped.discontinued} discontinued, ${skipped.noComposition} unreadable composition, ${skipped.existing} already in catalog, ${ambiguous} ambiguous names.`);
+  const ambiguous = [...seen.values()].filter((v) => v.size > 1).length;
+  console.log(`Read ${total} brand rows. Brands to import: ${rows.length}. Skipped: ${skipped.discontinued} discontinued, ${skipped.noComposition} unreadable composition, ${skipped.existing} already in catalog, ${ambiguous} names with conflicting compositions.`);
   if (!dry) await upsertInBatches("medicine_catalog", rows, "id");
 }
 
 if (genericsPath) {
-  const data = parseCsv(readFileSync(genericsPath, "utf8"));
-  console.log(`Read ${data.length} rows. Columns: ${Object.keys(data[0] ?? {}).join(", ")}`);
+  const data = readCsv(readFileSync(genericsPath, "utf8"));
   const rows: Record<string, unknown>[] = [];
   let unreadable = 0;
   for (const r of data) {
