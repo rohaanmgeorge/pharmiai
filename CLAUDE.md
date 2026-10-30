@@ -28,7 +28,8 @@ Mobile-first PWA medicine care assistant (hackathon prototype, fictional data). 
 ## Zero-Guess rules (never weaken)
 - Status is decided only by `lib/safety/status.ts` `computeStatus()` + DB RPC `confirm_item()`; the LLM never sets status.
 - Schedules, reminders, medicine info, and prices exist only for `verified` items — enforced by DB trigger `require_verified`, not just UI.
-- Medical facts, prices, generics, and shorthand come from DB tables only, never LLM text.
+- Facts about a specific medicine, prices, generics, and shorthand come from DB tables (cards). The assistant may give *general* health information in its own words (companion mode, decided 2026-10-30), shown with a "General information from AI" label; `guardReply(..., question)` still blocks personal dose instructions, diagnoses, unknown amounts, and naming a pill described by its look. Danger signs always show SOS (rule in `lib/agent/run.ts`).
+- Hand-added medicines (`/meds/add`) must be picked from the catalog — never free text — with the dose from the shorthand table.
 - `safety_log` is append-only.
 - Look-alike names: show all candidates, never auto-pick. Never auto-fill dose/timing/duration.
 
