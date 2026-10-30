@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Card, cn } from "@/components/ui";
 import { clock } from "./format";
 import type { TimelineEvent } from "./types";
+import { uiLocale } from "@/lib/client";
 
 const ICON = { missed: Pill, check: HeartPulse, alert: Bell, ack: Phone, ended: CheckCircle2 } as const;
 const TONE = { missed: "bg-danger-soft text-danger", check: "bg-warn-soft text-warn", alert: "bg-surface-2 text-ink-2", ack: "bg-ok-soft text-ok", ended: "bg-ok-soft text-ok" } as const;
@@ -25,7 +26,7 @@ export function Timeline({ events }: { events: TimelineEvent[] }) {
               </span>
               <span className="flex-1 text-sm">{e.text}</span>
               <span className="text-xs font-bold text-ink-2">
-                {new Date(e.at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} {clock(e.at)}
+                {new Date(e.at).toLocaleDateString(uiLocale(), { day: "numeric", month: "short" })} {clock(e.at)}
               </span>
             </>
           );

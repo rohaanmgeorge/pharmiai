@@ -10,6 +10,7 @@ import { usePrefs } from "@/components/providers";
 import { ErrorCard, LoadingCards } from "@/components/states";
 import { Card, PillButton, SectionTitle, StatusBadge } from "@/components/ui";
 import { patientQuery, useApi } from "@/lib/use-api";
+import { uiLocale } from "@/lib/client";
 
 type MedDetail = {
   id: string;
@@ -38,7 +39,7 @@ type MedDetail = {
 };
 
 const rupees = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const day = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+const day = (d: string) => new Date(`${d}T00:00:00`).toLocaleDateString(uiLocale(), { day: "numeric", month: "short", year: "numeric" });
 
 export function MedicineClient() {
   const { id } = useParams<{ id: string }>();

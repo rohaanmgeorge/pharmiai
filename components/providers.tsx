@@ -2,6 +2,7 @@
 
 import { MotionConfig } from "motion/react";
 import { createContext, useCallback, useContext, useEffect, useSyncExternalStore } from "react";
+import { TranslateApp } from "@/components/translate-app";
 import { translate, type Lang, type StringKey } from "@/lib/i18n";
 
 type PrefValues = { lang: Lang; elder: boolean };
@@ -62,6 +63,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
       {/* Elder mode: slower, spring-free motion. reducedMotion="user" respects the OS setting. */}
       <MotionConfig reducedMotion="user" transition={elder ? { duration: 0.33, ease: [0.2, 0.8, 0.2, 1] } : undefined}>
         {children}
+        {/* Whole-app language: swaps on-screen English for Malayalam / Hindi (see translate-app.tsx). */}
+        <TranslateApp lang={lang} />
       </MotionConfig>
     </PrefsContext.Provider>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUp, Camera, CheckCheck, Mic, Settings } from "lucide-react";
+import { ArrowUp, Camera, CheckCheck, Mic, Settings, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AgentCards, GeneralInfoNote, pendingFrom, type AgentCard } from "@/components/chat/agent-cards";
@@ -10,13 +10,20 @@ import { AssistantIcon } from "@/components/illustrations";
 import { usePrefs } from "@/components/providers";
 import { PillButton } from "@/components/ui";
 import type { Lang } from "@/lib/i18n";
+import { api } from "@/lib/api-client";
 import { useApi } from "@/lib/use-api";
+import { uiLocale } from "@/lib/client";
 
-// The conversation lives in React state only: nothing is stored, so no health data is kept on the phone.
-type Msg = { id: number; from: "user" | "ai"; text: string; time: string; cards?: AgentCard[]; general?: boolean };
+// The conversation is saved on the server (private to you, see /api/chat/history), never on the phone.
+// `restored` = loaded from history: its Yes/No buttons are no longer active.
+type Msg = { id: number; from: "user" | "ai"; text: string; time: string; cards?: AgentCard[]; general?: boolean; restored?: boolean };
+type Saved = { id: number; role: "user" | "assistant"; text: string; cards: AgentCard[]; general: boolean; created_at: string };
+
+const clock = (iso: string) => new Date(iso).toLocaleTimeString(uiLocale(), { hour: "2-digit", minute: "2-digit" });
+const day = (iso: string) => new Date(iso).toLocaleDateString(uiLocale(), { day: "numeric", month: "short" });
 
 const GREETING_ID = 1;
-const now = () => new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+const now = () => new Date().toLocaleTimeString(uiLocale(), { hour: "2-digit", minute: "2-digit" });
 
 const GREETING: Record<Lang, string> = {
   en: "Hi! Ask me about today's medicines, expiry dates or savings.",
@@ -52,12 +59,37 @@ export default function ChatPage() {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, typing]);
 
+  // Load earlier messages once, under the greeting.
+  useEffect(() => {
+    api<{ messages: Saved[] }>(`/api/chat/history${patientId ? `?patient=${patientId}` : ""}`)
+      .then(({ messages: saved }) => {
+        if (!saved.length) return;
+        const restored: Msg[] = saved.map((m) => ({
+          id: -m.id, // negative: never clashes with new messages (Date.now())
+          from: m.role === "user" ? "user" : "ai",
+          text: m.text,
+          time: `${day(m.created_at)} · ${clock(m.created_at)}`,
+          cards: m.cards,
+          general: m.general,
+          restored: true,
+        }));
+        setMessages((now) => [now[0], ...restored, ...now.slice(1)]);
+      })
+      .catch(() => {});
+  }, [patientId]);
+
+  async function clearHistory() {
+    if (!window.confirm("Clear the whole conversation? This can't be undone.")) return;
+    await api("/api/chat/history", { method: "DELETE" }).catch(() => {});
+    setMessages((m) => [m[0]]);
+  }
+
   async function send(text: string) {
     if (!text.trim() || typing) return;
     const last = messages[messages.length - 1];
     // A confirm-back is only answerable right after it was asked.
-    const pending = last?.from === "ai" ? pendingFrom(last.cards) : null;
-    const history = messages.slice(1).map((m) => ({ role: m.from === "user" ? ("user" as const) : ("model" as const), text: m.text }));
+    const pending = last?.from === "ai" && !last.restored ? pendingFrom(last.cards) : null;
+    const history = messages.slice(1).slice(-10).map((m) => ({ role: m.from === "user" ? ("user" as const) : ("model" as const), text: m.text }));
     setMessages((m) => [...m, { id: Date.now(), from: "user", text, time: now() }]);
     setDraft("");
     setTyping(true);
@@ -86,6 +118,11 @@ export default function ChatPage() {
         <Link href="/sos" className="flex min-h-11 items-center rounded-full bg-danger px-4 text-sm font-extrabold text-white lg:hidden">
           SOS
         </Link>
+        {messages.length > 1 && (
+          <button onClick={clearHistory} aria-label="Clear conversation history" className="flex size-12 items-center justify-center rounded-full hover:bg-white">
+            <Trash2 className="size-5 text-ink-2" aria-hidden />
+          </button>
+        )}
         <Link href="/settings" aria-label="Settings" className="flex size-12 items-center justify-center rounded-full hover:bg-white">
           <Settings className="size-5 text-ink-2" aria-hidden />
         </Link>
@@ -105,7 +142,9 @@ export default function ChatPage() {
             >
               {m.from === "user" ? (
                 <div className="max-w-[80%] rounded-[24px] rounded-br-md bg-lime-500 px-4 py-3 text-ink">
-                  <p className="text-[1.05rem]">{m.text}</p>
+                  <p className="text-[1.05rem]" data-no-translate>
+                    {m.text}
+                  </p>
                   <div className="mt-1 flex items-center justify-end gap-1 text-[0.7rem] font-semibold text-ink/60">
                     {m.time} <CheckCheck className="size-3.5" aria-label="Sent" />
                   </div>
@@ -114,12 +153,14 @@ export default function ChatPage() {
                 <div className="w-full max-w-[92%] space-y-3">
                   <div className="rounded-[24px] rounded-bl-md bg-white px-4 py-3 shadow-card">
                     {/* The greeting follows the chosen language (it is read after the page loads). */}
-                    <p className="text-[1.05rem]">{m.id === GREETING_ID ? GREETING[lang] : m.text}</p>
+                    <p className="text-[1.05rem]" data-no-translate>
+                      {m.id === GREETING_ID ? GREETING[lang] : m.text}
+                    </p>
                     {m.general && <GeneralInfoNote />}
                     <div className="mt-1 text-[0.7rem] font-semibold text-ink-2">{m.time}</div>
                   </div>
                   {m.cards && m.cards.length > 0 && (
-                    <AgentCards cards={m.cards} confirmActive={m.id === lastId && !typing} onConfirm={(answer) => send(answer)} />
+                    <AgentCards cards={m.cards} confirmActive={m.id === lastId && !typing && !m.restored} onConfirm={(answer) => send(answer)} />
                   )}
                 </div>
               )}

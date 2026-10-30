@@ -1,8 +1,9 @@
+import { uiLocale } from "@/lib/client";
 // Small display helpers for the family screens.
 
 /** "09:42" in the viewer's local time. */
 export function clock(at: string | Date): string {
-  return new Date(at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return new Date(at).toLocaleTimeString(uiLocale(), { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 /** "just now", "12 min ago", "3 h ago", "2 days ago". */

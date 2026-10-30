@@ -51,15 +51,26 @@ export async function POST(request: Request) {
 
   const ctx: ToolContext = { supabase, user, patientId, lang };
 
+  // Save both sides of the exchange (private to this user), then answer. A failed save never
+  // blocks the reply — history is a convenience.
+  const reply = async (answer: { speech: string; cards: unknown[]; general?: boolean }) => {
+    const { error } = await supabase.from("chat_messages").insert([
+      { user_id: user.id, patient_id: patientId, role: "user", text, lang },
+      { user_id: user.id, patient_id: patientId, role: "assistant", text: answer.speech.slice(0, 4000), cards: answer.cards, general: answer.general ?? false, lang },
+    ]);
+    if (error) console.error("agent: chat history not saved");
+    return NextResponse.json(answer);
+  };
+
   // 1. Answering a confirm-back. (Marking needs canManage — the act_on_dose RPC enforces it.)
   const pendingAction = ACTIONS.find((a) => a === body.pending?.action);
   const pendingDose = typeof body.pending?.doseId === "string" && UUID.test(body.pending.doseId) ? body.pending.doseId : null;
   if (pendingAction && pendingDose) {
     if (YES.test(text)) {
       const r = await markDose({ ...ctx, confirmed: { doseId: pendingDose, action: pendingAction } }, pendingDose, pendingAction, true);
-      return NextResponse.json({ speech: (r.data as { say: string }).say, cards: r.cards ?? [] });
+      return reply({ speech: (r.data as { say: string }).say, cards: r.cards ?? [] });
     }
-    if (NO.test(text)) return NextResponse.json({ speech: NOT_DONE[lang], cards: [] });
+    if (NO.test(text)) return reply({ speech: NOT_DONE[lang], cards: [] });
   }
 
   // 2. The AI, if we have a key; otherwise (or if it fails) the keyword fallback.
@@ -72,11 +83,10 @@ export async function POST(request: Request) {
           console.error("voice_guard_block: safety_log write failed"),
         );
       }
-      return NextResponse.json({ speech: out.speech, cards: out.cards, general: out.general ?? false });
+      return reply({ speech: out.speech, cards: out.cards, general: out.general ?? false });
     } catch {
       console.error("agent: AI unavailable, using keyword fallback");
     }
   }
-  const out = await fallbackReply(ctx, text);
-  return NextResponse.json(out);
+  return reply(await fallbackReply(ctx, text));
 }

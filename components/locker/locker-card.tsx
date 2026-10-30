@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { ChevronRight, FileText, Stethoscope } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/components/ui";
+import { uiLocale } from "@/lib/client";
 
 export type LockerItem = {
   id: string;
@@ -15,7 +16,7 @@ export type LockerItem = {
   thumbnailUrl: string | null;
 };
 
-export const formatDate = (iso: string) => new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+export const formatDate = (iso: string) => new Date(iso).toLocaleDateString(uiLocale(), { day: "numeric", month: "short", year: "numeric" });
 
 /** One prescription in the locker (DESIGN.md §7). Enters 40 ms after the previous card. */
 export function LockerCard({ item, href, index }: { item: LockerItem; href: string; index: number }) {

@@ -96,7 +96,7 @@ function PushBanner() {
 }
 
 export default function TodayPage() {
-  const { t } = usePrefs();
+  const { t, lang } = usePrefs();
   const [query] = useState(patientQuery);
   const { data, error, loading, reload, setData } = useApi<TodayData>(`/api/today${query}`);
   const [busy, setBusy] = useState<string | null>(null);
@@ -133,7 +133,7 @@ export default function TodayPage() {
   const doses = data?.doses ?? [];
   const taken = doses.filter((d) => d.state === "taken").length;
   const slots: Slot[] = ["morning", "afternoon", "night"];
-  const dateLabel = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" });
+  const dateLabel = new Date().toLocaleDateString(lang === "ml" ? "ml-IN" : lang === "hi" ? "hi-IN" : "en-IN", { weekday: "long", day: "numeric", month: "long" });
 
   return (
     <div className="mx-auto max-w-5xl">
