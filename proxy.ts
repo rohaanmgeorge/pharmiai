@@ -23,7 +23,9 @@ export async function proxy(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some((p) => (p === "/" ? path === "/" : path === p || path.startsWith(p + "/")));
-  if (!user && !isPublic && !path.startsWith("/api/cron")) {
+  // API calls with "Authorization: Bearer" are checked inside the route (requireUser), not here.
+  const hasBearer = path.startsWith("/api/") && /^Bearer /i.test(request.headers.get("authorization") ?? "");
+  if (!user && !isPublic && !hasBearer && !path.startsWith("/api/cron")) {
     if (path.startsWith("/api/")) return NextResponse.json({ error: "Please log in" }, { status: 401 });
     const url = request.nextUrl.clone();
     url.pathname = "/login";
