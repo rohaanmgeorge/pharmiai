@@ -1,18 +1,20 @@
 "use client";
 
-import { ChevronRight, Contact, HeartPulse, Layers, PiggyBank, ScanLine, Settings, Accessibility } from "lucide-react";
+import { CalendarClock, CalendarDays, Contact, FolderLock, HeartHandshake, Package, PiggyBank, Settings } from "lucide-react";
 import Link from "next/link";
 import { Card, PageHeader } from "@/components/ui";
 import { usePrefs } from "@/components/providers";
 
+// Some of these pages are built by other parts of the team; we just link to them.
 const ITEMS = [
-  { href: "/savings", Icon: PiggyBank, title: "Savings", body: "Brand vs Jan Aushadhi generic prices" },
-  { href: "/contacts", Icon: Contact, title: "Emergency contacts", body: "Who we alert, and in what order" },
-  { href: "/card/demo", Icon: HeartPulse, title: "Emergency Medical Card", body: "Share link and lock-screen QR" },
-  { href: "/review", Icon: ScanLine, title: "Last prescription", body: "Review what was scanned" },
-  { href: "/elder", Icon: Accessibility, title: "Elder mode", body: "Big text, big buttons, one Talk button" },
-  { href: "/settings", Icon: Settings, title: "Settings", body: "Language, notifications, privacy" },
-  { href: "/states", Icon: Layers, title: "Design states", body: "Loading, empty, error and offline screens" },
+  { href: "/today", Icon: CalendarDays, title: "Today", body: "Today's doses" },
+  { href: "/locker", Icon: FolderLock, title: "Prescription locker", body: "Every prescription, safely stored" },
+  { href: "/expiry", Icon: CalendarClock, title: "Expiry", body: "Strips that expire soon" },
+  { href: "/refills", Icon: Package, title: "Refills", body: "Medicines running low" },
+  { href: "/savings", Icon: PiggyBank, title: "Savings", body: "Brand vs Jan Aushadhi generic" },
+  { href: "/contacts", Icon: Contact, title: "Emergency contacts", body: "Who to tell in an SOS" },
+  { href: "/settings/care", Icon: HeartHandshake, title: "Care settings", body: "Refill, expiry and check-in rules" },
+  { href: "/settings", Icon: Settings, title: "Settings", body: "Profile, language, card, privacy" },
 ];
 
 export default function MorePage() {
@@ -20,20 +22,21 @@ export default function MorePage() {
   return (
     <div className="mx-auto max-w-2xl">
       <PageHeader title={t("more")} />
-      <Card className="mt-4 divide-y divide-line p-0">
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
         {ITEMS.map(({ href, Icon, title, body }) => (
-          <Link key={href} href={href} className="flex min-h-18 items-center gap-4 p-4 hover:bg-surface-2/60">
-            <span className="flex size-11 items-center justify-center rounded-full bg-lime-300">
-              <Icon className="size-5" aria-hidden />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block font-bold">{title}</span>
-              <span className="block truncate text-sm text-ink-2">{body}</span>
-            </span>
-            <ChevronRight className="size-5 text-ink-2" aria-hidden />
+          <Link key={href} href={href} className="block">
+            <Card className="flex h-full min-h-32 flex-col gap-3 p-4 transition-colors hover:bg-surface-2/60">
+              <span className="flex size-11 items-center justify-center rounded-full bg-lime-300">
+                <Icon className="size-5 text-ink" aria-hidden />
+              </span>
+              <span>
+                <span className="block font-bold">{title}</span>
+                <span className="block text-sm text-ink-2">{body}</span>
+              </span>
+            </Card>
           </Link>
         ))}
-      </Card>
+      </div>
       <p className="mt-6 text-center text-sm text-ink-2">{t("disclaimer")}</p>
     </div>
   );

@@ -4,11 +4,11 @@ import { AnimatePresence, motion } from "motion/react";
 import { Check, ChevronLeft, Mic, Square, Volume2, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { DoseCard } from "@/components/cards";
+import { AgentCards, pendingFrom } from "@/components/chat/agent-cards";
+import { askAgent, type AgentAnswer, type Turn } from "@/components/chat/ask-agent";
 import { usePrefs } from "@/components/providers";
 import { AiHeadline, cn, PillButton } from "@/components/ui";
-import { LANGS } from "@/lib/i18n";
-import { mockDose, todayDoses } from "@/lib/mock";
+import { type Lang, LANGS } from "@/lib/i18n";
 import { speak, useMicLevel, useSpeechToText } from "@/lib/voice";
 
 const BARS = 28;
@@ -19,10 +19,16 @@ const DEMO_SCRIPT = {
   hi: "आज मेरी अगली गोली कौन सी है?",
 };
 
-const REPLY = {
-  en: "Your next medicine is Glyconil 500, one tablet at 8:30 tonight, after food.",
-  ml: "അടുത്ത മരുന്ന് ഗ്ലൈക്കോനിൽ 500 ആണ്, ഇന്ന് രാത്രി 8:30-ന് ഭക്ഷണശേഷം ഒരു ഗുളിക.",
-  hi: "आपकी अगली दवा ग्लाइकोनिल 500 है, आज रात 8:30 बजे खाने के बाद एक गोली।",
+const OFFLINE: Record<Lang, string> = {
+  en: "Sorry, I couldn't reach the assistant. Please try again.",
+  ml: "ക്ഷമിക്കണം, സഹായിയുമായി ബന്ധപ്പെടാനായില്ല. വീണ്ടും ശ്രമിക്കൂ.",
+  hi: "माफ़ कीजिए, सहायक से जुड़ नहीं पाए। फिर से कोशिश करें।",
+};
+
+const NO_VOICE: Record<Lang, string> = {
+  en: "Voice not available, reading on screen",
+  ml: "ശബ്ദം ലഭ്യമല്ല, സ്ക്രീനിൽ വായിക്കൂ",
+  hi: "आवाज़ उपलब्ध नहीं, स्क्रीन पर पढ़ें",
 };
 
 /** Waveform bars driven by mic level via rAF → direct style writes (no React re-render per frame). */
@@ -70,6 +76,9 @@ export default function VoicePage() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [seconds, setSeconds] = useState(0);
   const [noVoice, setNoVoice] = useState(false);
+  const [reply, setReply] = useState<AgentAnswer | null>(null);
+  // This visit's conversation, in memory only (never saved): lets "yes" answer a confirm-back.
+  const [history, setHistory] = useState<Turn[]>([]);
   const mic = useMicLevel(phase === "listening");
 
   useEffect(() => {
@@ -87,13 +96,26 @@ export default function VoicePage() {
     stt.cancel();
     setPhase("idle");
   };
+  // Send what was heard (or a Yes/No tap) to the assistant, then show and speak the reply.
+  async function ask(text: string) {
+    if (!text) return setPhase("idle");
+    setPhase("thinking");
+    const pending = pendingFrom(reply?.cards);
+    let answer: AgentAnswer;
+    try {
+      answer = await askAgent({ text, lang, history, pending });
+    } catch {
+      answer = { speech: OFFLINE[lang], cards: [] };
+    }
+    setHistory((h) => [...h, { role: "user" as const, text }, { role: "model" as const, text: answer.speech }].slice(-10));
+    setReply(answer);
+    setPhase("reply");
+    setNoVoice(!speak(answer.speech, speechLang));
+  }
+
   const confirm = () => {
     stt.stop();
-    setPhase("thinking");
-    setTimeout(() => {
-      setPhase("reply");
-      setNoVoice(!speak(REPLY[lang], speechLang));
-    }, 1100);
+    ask(`${stt.finalText} ${stt.interim}`.trim());
   };
 
   const words = stt.finalText ? stt.finalText.split(" ") : [];
@@ -126,16 +148,25 @@ export default function VoicePage() {
         <AnimatePresence mode="wait">
           {phase === "reply" ? (
             <motion.div key="reply" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="w-full space-y-5">
-              <AiHeadline>{REPLY[lang]}</AiHeadline>
-              <div className="text-left">
-                <DoseCard dose={mockDose(todayDoses[3])} compact />
-              </div>
+              <AiHeadline>
+                {/* Word-by-word reveal (MotionConfig turns movement off for reduced motion). */}
+                {(reply?.speech ?? "").split(" ").map((w, i) => (
+                  <motion.span key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.06, duration: 0.2 }}>
+                    {w}{" "}
+                  </motion.span>
+                ))}
+              </AiHeadline>
+              {reply && reply.cards.length > 0 && (
+                <div className="space-y-3 text-left">
+                  <AgentCards cards={reply.cards} confirmActive onConfirm={(answer) => ask(answer)} big />
+                </div>
+              )}
               {noVoice ? (
-                <p className="rounded-full bg-warn-soft px-4 py-2 text-sm font-semibold text-warn">
-                  No {LANGS.find((l) => l.code === lang)!.label} voice on this phone — reading on screen.
+                <p className="rounded-full bg-warn-soft px-4 py-2 text-sm font-semibold text-warn" role="status">
+                  {NO_VOICE[lang]}
                 </p>
               ) : (
-                <PillButton size="sm" onClick={() => setNoVoice(!speak(REPLY[lang], speechLang))}>
+                <PillButton onClick={() => setNoVoice(!speak(reply?.speech ?? "", speechLang))}>
                   <Volume2 className="size-4" aria-hidden /> Say it again
                 </PillButton>
               )}

@@ -5,6 +5,7 @@ import { CalendarCheck, LayoutGrid, MessageCircle, ScanLine, Siren, Users, WifiO
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { ActivityPing } from "@/components/activity-ping";
 import { usePrefs } from "@/components/providers";
 import { AssistantIcon } from "@/components/illustrations";
 import { cn } from "@/components/ui";
@@ -136,6 +137,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         {children}
       </main>
+      {/* Opening the app counts as activity for the "Are you okay?" check. */}
+      <ActivityPing />
       <BottomNav pathname={pathname} />
       {/* Chat has its own SOS button in the header, so the floating one doesn't cover the input bar. */}
       {pathname !== "/chat" && <SOSFab />}

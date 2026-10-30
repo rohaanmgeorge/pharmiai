@@ -1,74 +1,77 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUp, CheckCheck, Mic, Paperclip, Settings } from "lucide-react";
+import { ArrowUp, Camera, CheckCheck, Mic, Settings } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { DoseCard, MedicineSummary, SavingsCard } from "@/components/cards";
+import { AgentCards, pendingFrom, type AgentCard } from "@/components/chat/agent-cards";
+import { askAgent, patientIdFromUrl } from "@/components/chat/ask-agent";
 import { AssistantIcon } from "@/components/illustrations";
 import { usePrefs } from "@/components/providers";
 import { PillButton } from "@/components/ui";
-import { type Dose, type DoseState, getMedicine, mockDose, todayDoses } from "@/lib/mock";
+import type { Lang } from "@/lib/i18n";
+import { useApi } from "@/lib/use-api";
 
-type Rich = { kind: "dose"; dose: Dose } | { kind: "savings" } | { kind: "medicine"; id: string };
-type Msg = { id: number; from: "user" | "ai"; text: string; time: string; rich?: Rich; chips?: string[] };
+// The conversation lives in React state only: nothing is stored, so no health data is kept on the phone.
+type Msg = { id: number; from: "user" | "ai"; text: string; time: string; cards?: AgentCard[] };
 
+const GREETING_ID = 1;
 const now = () => new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
 
-const SEED: Msg[] = [
-  {
-    id: 1,
-    from: "ai",
-    text: "Good morning, Amma. It's time for your morning tablet.",
-    time: "08:30",
-    rich: { kind: "dose", dose: todayDoses[2] },
-  },
-  { id: 2, from: "user", text: "How much can I save on my medicines?", time: "08:32" },
-  { id: 3, from: "ai", text: "Here is what you could save with Jan Aushadhi generics, for your verified medicines:", time: "08:32", rich: { kind: "savings" } },
-  { id: 4, from: "user", text: "What is Glyconil for?", time: "08:33" },
-  {
-    id: 5,
-    from: "ai",
-    text: "This is from our checked medicine database:",
-    time: "08:33",
-    rich: { kind: "medicine", id: "glyconil" },
-    chips: ["Side effects", "When is my next dose?", "Can I take two?"],
-  },
-];
+const GREETING: Record<Lang, string> = {
+  en: "Hi! Ask me about today's medicines, expiry dates or savings.",
+  ml: "നമസ്കാരം! ഇന്നത്തെ മരുന്നുകൾ, കാലാവധി, ലാഭം എന്നിവയെക്കുറിച്ച് ചോദിക്കൂ.",
+  hi: "नमस्ते! आज की दवाओं, एक्सपायरी या बचत के बारे में पूछें।",
+};
 
-// Canned design-mode replies. The real Voice Companion Agent replaces this (see PLAN.md §6).
-function mockReply(text: string): Omit<Msg, "id" | "time" | "from"> {
-  const q = text.toLowerCase();
-  if (q.includes("two") || q.includes("double") || q.includes("dose") && q.includes("more"))
-    return { text: "I can't give dose advice. Please ask your doctor or pharmacist. Would you like me to call Anjali?", chips: ["Call Anjali", "No, thanks"] };
-  if (q.includes("next")) return { text: "Your next medicine is at 20:30:", rich: { kind: "dose", dose: todayDoses[3] } };
-  if (q.includes("save")) return { text: "Here are your savings:", rich: { kind: "savings" } };
-  if (q.includes("side")) return { text: "Common side effects, from our checked database:", rich: { kind: "medicine", id: "glyconil" } };
-  return { text: "I'm not sure about that. I only answer from your verified medicines. You can ask about your next dose, savings or a medicine's uses." };
-}
+const CHIPS: Record<Lang, string[]> = {
+  en: ["What's next?", "Mark my morning dose taken", "Which medicines expire soon?"],
+  ml: ["അടുത്ത മരുന്ന് ഏത്?", "രാവിലത്തെ ഡോസ് കഴിച്ചു", "ഏതൊക്കെ മരുന്നുകളുടെ കാലാവധി തീരാറായി?"],
+  hi: ["अगली दवा कौन सी है?", "सुबह की खुराक ले ली", "कौन सी दवाएँ जल्दी एक्सपायर होंगी?"],
+};
+
+const OFFLINE: Record<Lang, string> = {
+  en: "Sorry, I couldn't reach the assistant. Please try again.",
+  ml: "ക്ഷമിക്കണം, സഹായിയുമായി ബന്ധപ്പെടാനായില്ല. വീണ്ടും ശ്രമിക്കൂ.",
+  hi: "माफ़ कीजिए, सहायक से जुड़ नहीं पाए। फिर से कोशिश करें।",
+};
+
+type Me = { me: { name: string } | null; caredFor: { id: string; name: string }[] };
 
 export default function ChatPage() {
-  const { t } = usePrefs();
-  const [messages, setMessages] = useState<Msg[]>(SEED);
-  const [doseStates, setDoseStates] = useState<Record<string, DoseState>>({});
+  const { t, lang } = usePrefs();
+  const [messages, setMessages] = useState<Msg[]>(() => [{ id: GREETING_ID, from: "ai", text: "", time: now() }]);
   const [draft, setDraft] = useState("");
   const [typing, setTyping] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  const { data: me } = useApi<Me>("/api/me");
+  const [patientId] = useState(patientIdFromUrl);
+  const caringFor = patientId ? me?.caredFor.find((p) => p.id === patientId)?.name : me?.me?.name;
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, typing]);
 
-  function send(text: string) {
-    if (!text.trim()) return;
+  async function send(text: string) {
+    if (!text.trim() || typing) return;
+    const last = messages[messages.length - 1];
+    // A confirm-back is only answerable right after it was asked.
+    const pending = last?.from === "ai" ? pendingFrom(last.cards) : null;
+    const history = messages.slice(1).map((m) => ({ role: m.from === "user" ? ("user" as const) : ("model" as const), text: m.text }));
     setMessages((m) => [...m, { id: Date.now(), from: "user", text, time: now() }]);
     setDraft("");
     setTyping(true);
-    setTimeout(() => {
+    try {
+      const res = await askAgent({ text, lang, history, pending });
+      setMessages((m) => [...m, { id: Date.now() + 1, from: "ai", text: res.speech, time: now(), cards: res.cards }]);
+    } catch {
+      setMessages((m) => [...m, { id: Date.now() + 1, from: "ai", text: OFFLINE[lang], time: now() }]);
+    } finally {
       setTyping(false);
-      setMessages((m) => [...m, { id: Date.now() + 1, from: "ai", time: now(), ...mockReply(text) }]);
-    }, 900);
+    }
   }
+
+  const lastId = messages[messages.length - 1]?.id;
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col">
@@ -77,7 +80,7 @@ export default function ChatPage() {
         <div className="min-w-0 flex-1">
           <div className="truncate font-extrabold">PharmiAI Assistant</div>
           <div className="flex items-center gap-1.5 truncate text-xs font-semibold text-ok">
-            <span className="size-1.5 rounded-full bg-ok" /> Caring for Amma
+            <span className="size-1.5 rounded-full bg-ok" /> {caringFor ? `Caring for ${caringFor}` : "Online"}
           </div>
         </div>
         <Link href="/sos" className="flex min-h-11 items-center rounded-full bg-danger px-4 text-sm font-extrabold text-white lg:hidden">
@@ -88,8 +91,8 @@ export default function ChatPage() {
         </Link>
       </header>
 
-      <div className="mt-4 space-y-4">
-        <div className="text-center text-xs font-bold text-ink-2">Today</div>
+      <div className="mt-4 space-y-4" aria-live="polite">
+        <div className="text-center text-xs font-bold text-ink-2">{t("today")}</div>
         <AnimatePresence initial={false}>
           {messages.map((m) => (
             <motion.div
@@ -104,31 +107,18 @@ export default function ChatPage() {
                 <div className="max-w-[80%] rounded-[24px] rounded-br-md bg-lime-500 px-4 py-3 text-ink">
                   <p className="text-[1.05rem]">{m.text}</p>
                   <div className="mt-1 flex items-center justify-end gap-1 text-[0.7rem] font-semibold text-ink/60">
-                    {m.time} <CheckCheck className="size-3.5" aria-label="Read" />
+                    {m.time} <CheckCheck className="size-3.5" aria-label="Sent" />
                   </div>
                 </div>
               ) : (
                 <div className="w-full max-w-[92%] space-y-3">
                   <div className="rounded-[24px] rounded-bl-md bg-white px-4 py-3 shadow-card">
-                    <p className="text-[1.05rem]">{m.text}</p>
+                    {/* The greeting follows the chosen language (it is read after the page loads). */}
+                    <p className="text-[1.05rem]">{m.id === GREETING_ID ? GREETING[lang] : m.text}</p>
                     <div className="mt-1 text-[0.7rem] font-semibold text-ink-2">{m.time}</div>
                   </div>
-                  {m.rich?.kind === "dose" && (
-                    <DoseCard
-                      dose={mockDose({ ...m.rich.dose, state: doseStates[m.rich.dose.id] ?? m.rich.dose.state })}
-                      onAct={(s) => setDoseStates((d) => ({ ...d, [(m.rich as { dose: Dose }).dose.id]: s }))}
-                    />
-                  )}
-                  {m.rich?.kind === "savings" && <SavingsCard compact />}
-                  {m.rich?.kind === "medicine" && <MedicineSummary med={getMedicine(m.rich.id)!} />}
-                  {m.chips && (
-                    <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
-                      {m.chips.map((c) => (
-                        <PillButton key={c} size="sm" className="shrink-0" onClick={() => send(c)}>
-                          {c}
-                        </PillButton>
-                      ))}
-                    </div>
+                  {m.cards && m.cards.length > 0 && (
+                    <AgentCards cards={m.cards} confirmActive={m.id === lastId && !typing} onConfirm={(answer) => send(answer)} />
                   )}
                 </div>
               )}
@@ -144,6 +134,15 @@ export default function ChatPage() {
             </motion.div>
           )}
         </AnimatePresence>
+        {!typing && (
+          <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
+            {CHIPS[lang].map((c) => (
+              <PillButton key={c} className="shrink-0" onClick={() => send(c)}>
+                {c}
+              </PillButton>
+            ))}
+          </div>
+        )}
         <div ref={endRef} className="h-28 lg:h-0" />
       </div>
 
@@ -163,17 +162,18 @@ export default function ChatPage() {
             onChange={(e) => setDraft(e.target.value)}
             placeholder={t("inputPlaceholder")}
             aria-label="Message"
+            maxLength={500}
             className="min-h-12 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-ink-2"
           />
           <Link href="/scan" aria-label="Scan prescription" className="flex size-12 shrink-0 items-center justify-center rounded-full text-ink-2 hover:bg-surface-2">
-            <Paperclip className="size-5" aria-hidden />
+            <Camera className="size-5" aria-hidden />
           </Link>
           <motion.button
             whileTap={{ scale: 0.92 }}
             type="submit"
             aria-label="Send"
             className="flex size-12 shrink-0 items-center justify-center rounded-full border-2 border-ink text-ink disabled:border-line disabled:text-muted"
-            disabled={!draft.trim()}
+            disabled={!draft.trim() || typing}
           >
             <ArrowUp className="size-5" aria-hidden />
           </motion.button>

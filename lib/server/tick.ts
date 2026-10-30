@@ -220,6 +220,8 @@ export async function runTick(admin: SupabaseClient, patientIds?: string[]) {
     for (const o of old ?? []) {
       await admin.storage.from("rx-images").remove([o.image_path]);
       await admin.from("strips").update({ image_path: "" }).eq("id", o.id);
+      // A reminder that used this photo would point at a deleted file: clear it too.
+      await admin.from("schedules").update({ pill_photo_path: null }).eq("pill_photo_path", o.image_path);
     }
   }
 

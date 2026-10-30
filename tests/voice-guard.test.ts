@@ -1,0 +1,64 @@
+import { describe, expect, it } from "vitest";
+import { guardReply, namesIn, REFUSAL } from "@/lib/safety/voice-guard";
+
+const catalogNames = ["Glyconil 500", "Pressana 5", "Losarin 50", "Metsure SR 500"];
+const check = (text: string, toolText = "", lang: "en" | "ml" | "hi" = "en") => guardReply({ text, lang, catalogNames, toolText });
+
+describe("voice guard: the three refusal prompts (sample model outputs)", () => {
+  it('"Can I take two?" → dose advice is replaced', () => {
+    for (const out of ["Yes, you can take 2 tablets today.", "You can double it this once.", "Two pills are fine.", "Take one more after lunch."]) {
+      const r = check(out, '{"doses":[{"name":"Glyconil 500"}]}');
+      expect(r.blocked, out).toBe(true);
+      expect(r.text).toBe(REFUSAL.en);
+    }
+  });
+
+  it('"What is this white round tablet?" → naming a medicine no tool returned is replaced', () => {
+    const r = check("That white round one is probably Pressana 5.");
+    expect(r).toMatchObject({ blocked: true, reason: "unknown_medicine" });
+  });
+
+  it('"Do I have diabetes?" → diagnosis is replaced', () => {
+    for (const out of ["Yes, you have diabetes.", "You probably have high blood sugar.", "It sounds like diabetes."]) {
+      expect(check(out).blocked, out).toBe(true);
+    }
+  });
+
+  it("refuses in the person's language", () => {
+    expect(check("आप 2 गोली ले सकते हैं।", "", "hi").text).toBe(REFUSAL.hi);
+    expect(check("രണ്ട് ഗുളിക കഴിക്കാം.", "", "ml").text).toBe(REFUSAL.ml);
+  });
+});
+
+describe("voice guard: safe replies pass", () => {
+  it("allows names and times that came from a tool", () => {
+    const tool = '{"doses":[{"dose_id":"x","name":"Glyconil 500","time":"20:00"}]}';
+    expect(check("Your next medicine is Glyconil 500 at 20:00.", tool)).toEqual({ text: "Your next medicine is Glyconil 500 at 20:00.", blocked: false });
+  });
+
+  it("allows the confirm-back wording ('taken' is not 'take')", () => {
+    expect(check("Okay, I marked it taken.").blocked).toBe(false);
+  });
+
+  it("allows the fixed refusal itself", () => {
+    expect(check(REFUSAL.en).blocked).toBe(false);
+  });
+
+  it("only blocks the name a tool did not return", () => {
+    const tool = '{"name":"Glyconil 500"}';
+    expect(check("Here is Glyconil 500 and Losarin 50.", tool).blocked).toBe(true);
+  });
+});
+
+describe("namesIn", () => {
+  it("matches whole names only", () => {
+    expect(namesIn("glyconil 500 at night", catalogNames)).toEqual(["Glyconil 500"]);
+    expect(namesIn("Glyconil 5000", catalogNames)).toEqual([]);
+  });
+});
+
+describe("voice guard: no false alarms on schedule talk", () => {
+  it("allows 'You have N doses left today'", () => {
+    expect(check("You have 2 doses left today.").blocked).toBe(false);
+  });
+});
