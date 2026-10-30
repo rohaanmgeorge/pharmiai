@@ -62,3 +62,33 @@ describe("voice guard: no false alarms on schedule talk", () => {
     expect(check("You have 2 doses left today.").blocked).toBe(false);
   });
 });
+
+describe("companion mode (the person's question is known)", () => {
+  const ask = (out: string, question: string, tool = "") => guardReply({ text: out, lang: "en", catalogNames, toolText: tool, question });
+
+  it("allows general information about any medicine", () => {
+    expect(ask("Paracetamol is commonly used for fever and mild pain.", "What is paracetamol for?").blocked).toBe(false);
+    expect(ask("Losarin 50 contains losartan and is used for high blood pressure.", "Tell me about Losarin").blocked).toBe(false);
+  });
+
+  it("allows strengths only when they came from the database", () => {
+    expect(ask("Dolo 650 contains paracetamol 650 mg.", "What is in Dolo 650?", '{"strength":"650 mg"}').blocked).toBe(false);
+    expect(ask("Adults usually take 1000 mg.", "How much paracetamol?").blocked).toBe(true);
+  });
+
+  it("still blocks personal instructions", () => {
+    expect(ask("You can take two tablets now.", "Can I take two?").blocked).toBe(true);
+    expect(ask("You should stop Glyconil.", "Should I stop Glyconil?").blocked).toBe(true);
+    expect(ask("Switch to the cheaper brand.", "Is there a cheaper one?").blocked).toBe(true);
+    expect(ask("Do not stop your medicine without asking your doctor.", "Can I stop?").blocked).toBe(false);
+  });
+
+  it("still blocks diagnosis", () => {
+    expect(ask("You probably have diabetes.", "Do I have diabetes?").blocked).toBe(true);
+    expect(ask("It sounds like an infection.", "My throat hurts").blocked).toBe(true);
+  });
+
+  it("still refuses to name a pill described by its look", () => {
+    expect(ask("That is Glyconil 500.", "What is this white round tablet?")).toMatchObject({ blocked: true, reason: "unknown_medicine" });
+  });
+});

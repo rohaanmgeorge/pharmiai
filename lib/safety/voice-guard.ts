@@ -50,13 +50,44 @@ export function namesIn(text: string, catalogNames: string[]): string[] {
   });
 }
 
+// ---- General companion mode (used when the person's question is known) ----
+// The assistant may talk about any medicine and give general information, but it must still
+// never tell THIS person what to take, never diagnose, and never identify a pill by its look.
+
+// Second-person or imperative instructions: "you should take…", "Stop your…", "Switch to…".
+// "Do not stop your medicine without your doctor" is fine (starts with "Do not").
+const PERSONAL_INSTRUCTION = [
+  /\byou (can|could|should|must|may|need to|have to) (take|stop|start|increase|double|reduce|decrease|halve|switch|skip)\b/i,
+  /(^|[.!?]\s*)(take|stop|start|increase|double|reduce|decrease|halve|switch to|skip)\b/i,
+  ...INSTRUCTION.slice(1), // Hindi / Malayalam advice forms stay blocked
+];
+const GENERAL_DIAGNOSIS = [DIAGNOSIS[0], new RegExp(`\\b(looks like|sounds like|seems like) (you have |it'?s |an? )?(\\w+ ){0,2}${ILLNESS}`, "i"), DIAGNOSIS[2], DIAGNOSIS[3]];
+// Questions about identifying a tablet by how it looks.
+const LOOKS_QUESTION = /\b(white|yellow|pink|red|blue|orange|green|round|oval|small|big|marking|marked|shape|colou?r|loose)\b.*\b(tablet|pill|capsule|goli)\b|\b(what|which) (is )?(this|that) (tablet|pill|capsule)\b|गोली कौन|ഏത് ഗുളിക/i;
+
 /**
- * Checks the AI's reply. `toolText` is everything the tools returned this turn (as text):
- * a medicine name may appear in the reply only if a tool returned it.
+ * Checks the AI's reply. `toolText` is everything the tools returned this turn (as text).
+ * Without `question` (strict mode): a medicine name may appear only if a tool returned it, and no
+ * amounts at all. With `question` (companion mode): general information about any medicine is
+ * allowed, amounts only if they came from the database, and never personal instructions,
+ * diagnoses, or naming a pill the person described by its look.
  */
-export function guardReply(input: { text: string; lang: Lang; catalogNames: string[]; toolText: string }): GuardResult {
-  const { text, lang, catalogNames, toolText } = input;
+export function guardReply(input: { text: string; lang: Lang; catalogNames: string[]; toolText: string; question?: string }): GuardResult {
+  const { text, lang, catalogNames, toolText, question } = input;
   const refuse = (reason: GuardReason): GuardResult => ({ text: REFUSAL[lang], blocked: true, reason });
+
+  if (question !== undefined) {
+    const amounts = [...text.matchAll(new RegExp(DOSE_AMOUNT.source, "gi"))].map((m) => norm(m[0]).replace(/\s+/g, ""));
+    const toolCompact = norm(toolText).replace(/\s+/g, "");
+    if (amounts.some((a) => !toolCompact.includes(a))) return refuse("dose_amount");
+    if (PERSONAL_INSTRUCTION.some((r) => r.test(text))) return refuse("instruction");
+    if (GENERAL_DIAGNOSIS.some((r) => r.test(text))) return refuse("diagnosis");
+    if (LOOKS_QUESTION.test(question)) {
+      const fromTools = new Set(namesIn(toolText, catalogNames).map(norm));
+      if (namesIn(text, catalogNames).some((n) => !fromTools.has(norm(n)))) return refuse("unknown_medicine");
+    }
+    return { text, blocked: false };
+  }
 
   if (DOSE_AMOUNT.test(text)) return refuse("dose_amount");
   if (INSTRUCTION.some((r) => r.test(text))) return refuse("instruction");

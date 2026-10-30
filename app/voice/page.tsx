@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Check, ChevronLeft, Mic, Square, Volume2, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { AgentCards, pendingFrom } from "@/components/chat/agent-cards";
+import { AgentCards, GeneralInfoNote, pendingFrom } from "@/components/chat/agent-cards";
 import { askAgent, type AgentAnswer, type Turn } from "@/components/chat/ask-agent";
 import { usePrefs } from "@/components/providers";
 import { AiHeadline, cn, PillButton } from "@/components/ui";
@@ -206,6 +206,7 @@ export default function VoicePage() {
                   </motion.span>
                 ))}
               </AiHeadline>
+              {reply?.general && <GeneralInfoNote />}
               {reply && reply.cards.length > 0 && (
                 <div className="space-y-3 text-left">
                   <AgentCards cards={reply.cards} confirmActive onConfirm={(answer) => ask(answer)} big />

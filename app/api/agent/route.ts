@@ -7,6 +7,7 @@ import type { Lang } from "@/lib/i18n";
 import { safetyLog } from "@/lib/safety/log";
 import { canView, fail, requireUser } from "@/lib/server/auth";
 import { catalogNamesIn } from "@/lib/server/catalog";
+import { infoTools } from "@/lib/agent/info-tools";
 
 // POST /api/agent  { text, lang, patientId?, history?, pending? } → { speech, cards }
 // history: the last few turns ({ role: "user" | "model", text }) so the AI keeps context.
@@ -64,14 +65,14 @@ export async function POST(request: Request) {
   // 2. The AI, if we have a key; otherwise (or if it fails) the keyword fallback.
   if (process.env.GEMINI_API_KEY) {
     try {
-      const out = await runAgent({ ctx, tools: [...agentTools, ...refillTools], history, text, catalogNames: (t) => catalogNamesIn(supabase, t) });
+      const out = await runAgent({ ctx, tools: [...agentTools, ...infoTools, ...refillTools], history, text, catalogNames: (t) => catalogNamesIn(supabase, t) });
       if (out.blocked) {
         // IDs and a reason code only — never the text.
         await safetyLog([{ actor: user.id, patientId, event: "voice_guard_block", payload: { reason: out.blocked, model: out.model } }]).catch(() =>
           console.error("voice_guard_block: safety_log write failed"),
         );
       }
-      return NextResponse.json({ speech: out.speech, cards: out.cards });
+      return NextResponse.json({ speech: out.speech, cards: out.cards, general: out.general ?? false });
     } catch {
       console.error("agent: AI unavailable, using keyword fallback");
     }

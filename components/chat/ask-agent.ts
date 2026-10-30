@@ -6,7 +6,7 @@ import type { AgentCard } from "./agent-cards";
 // on the screen (never saved), and are sent along so the server knows what "yes" means.
 
 export type Turn = { role: "user" | "model"; text: string };
-export type AgentAnswer = { speech: string; cards: AgentCard[] };
+export type AgentAnswer = { speech: string; cards: AgentCard[]; general?: boolean };
 
 /** "?patient=<id>" in the address bar → that person's medicines (caregiver view). */
 export function patientIdFromUrl(): string | undefined {

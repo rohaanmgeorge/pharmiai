@@ -210,6 +210,12 @@ export function AgentCards({
             return <Confirm key={key} card={c as ConfirmCard} active={confirmActive} onAnswer={(a, card) => onConfirm?.(a, card)} big={big} />;
           case "sos":
             return <SosButton key={key} />;
+          case "medicine_info":
+            return <MedicineInfo key={key} card={c as unknown as MedicineInfoCard} />;
+          case "medicine_choices":
+            return <MedicineChoices key={key} card={c as unknown as ChoicesCard} />;
+          case "alternatives":
+            return <Alternatives key={key} card={c as unknown as AlternativesCard} />;
           case "refill_draft":
             return <RefillDraft key={key} id={String(c.suggestionId)} text={String(c.text ?? "")} />;
           default:
@@ -218,6 +224,108 @@ export function AgentCards({
       })}
     </>
   );
+}
+
+type MedicineInfoCard = { name: string; composition: string; manufacturer: string | null; uses: string | null; sideEffects: string | null; price: string | null; source: string };
+type ChoicesCard = { asked: string; choices: { name: string; composition: string }[] };
+type AlternativesCard = {
+  base: { name: string; composition: string; price: string | null };
+  brands: { name: string; manufacturer: string | null; price: string | null }[];
+  generics: { name: string; price: string | null }[];
+  source: string;
+};
+
+/** Any medicine from the database (not necessarily on the prescription). */
+function MedicineInfo({ card }: { card: MedicineInfoCard }) {
+  return (
+    <Card className="space-y-3 p-4">
+      <div>
+        <div className="text-lg font-bold">{card.name}</div>
+        <div className="text-sm text-ink-2 capitalize">{card.composition}</div>
+        {card.manufacturer && <div className="text-xs text-ink-2">{card.manufacturer}</div>}
+      </div>
+      {card.uses && (
+        <div>
+          <div className="text-sm font-bold text-ink-2">Used for</div>
+          <p className="line-clamp-6">{card.uses}</p>
+        </div>
+      )}
+      {card.sideEffects && (
+        <div>
+          <div className="text-sm font-bold text-ink-2">Common side effects</div>
+          <p className="line-clamp-4">{card.sideEffects}</p>
+        </div>
+      )}
+      {card.price && <div className="text-sm font-semibold">Price: {card.price}</div>}
+      <p className="border-t border-line pt-2 text-xs text-ink-2">Source: {card.source} · Not medical advice. Ask your doctor before starting any medicine.</p>
+    </Card>
+  );
+}
+
+/** Several names look alike: we list them and never pick one. */
+function MedicineChoices({ card }: { card: ChoicesCard }) {
+  return (
+    <Card className="p-4">
+      <div className="mb-2 text-sm font-bold text-ink-2">Which one did you mean? These names look alike:</div>
+      <ul className="space-y-1">
+        {card.choices.map((c) => (
+          <li key={c.name} className="rounded-sm bg-surface-2 px-3 py-2">
+            <span className="font-bold">{c.name}</span> <span className="text-sm text-ink-2 capitalize">· {c.composition}</span>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+/** Same active ingredients and strength, cheapest first. Switching is the doctor's decision. */
+function Alternatives({ card }: { card: AlternativesCard }) {
+  return (
+    <Card className="space-y-3 p-4">
+      <div>
+        <div className="text-sm font-bold text-ink-2">Same medicine, other makers</div>
+        <div className="font-bold">
+          {card.base.name} {card.base.price && <span className="text-sm font-normal text-ink-2">· {card.base.price}</span>}
+        </div>
+        <div className="text-sm text-ink-2 capitalize">{card.base.composition}</div>
+      </div>
+      {card.generics.length > 0 && (
+        <div>
+          <div className="text-sm font-bold text-green-700">Jan Aushadhi generic</div>
+          {card.generics.map((g) => (
+            <div key={g.name} className="flex flex-wrap justify-between gap-x-3 text-sm">
+              <span className="min-w-0">{g.name}</span>
+              <span className="font-bold text-green-700">{g.price}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {card.brands.length > 0 ? (
+        <div>
+          <div className="text-sm font-bold text-ink-2">Other brands</div>
+          {card.brands.map((b) => (
+            <div key={b.name} className="flex flex-wrap justify-between gap-x-3 text-sm">
+              <span className="min-w-0">
+                {b.name}
+                {b.manufacturer && <span className="text-ink-2"> · {b.manufacturer}</span>}
+              </span>
+              <span className="font-semibold">{b.price ?? "—"}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        card.generics.length === 0 && <p className="text-sm text-ink-2">No other brand with exactly the same ingredients and strength in our list.</p>
+      )}
+      <p className="border-t border-line pt-2 text-xs text-ink-2">
+        Source: {card.source} · Ask your doctor or pharmacist before switching to any of these.
+      </p>
+    </Card>
+  );
+}
+
+/** Small label under answers that come from general AI knowledge, not from our database. */
+export function GeneralInfoNote() {
+  return <p className="mt-1 text-xs font-semibold text-ink-2">General information from AI — not personal medical advice. Check with your doctor or pharmacist.</p>;
 }
 
 /** The refill agent's draft: the person reviews, edits and sends it themselves on the refill screen. */

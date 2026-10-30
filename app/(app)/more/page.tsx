@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, CalendarDays, Contact, FolderLock, HeartHandshake, Package, PiggyBank, Settings } from "lucide-react";
+import { CalendarClock, CalendarDays, Contact, FolderLock, HeartHandshake, Package, PiggyBank, PlusCircle, Settings } from "lucide-react";
 import Link from "next/link";
 import { Card, PageHeader } from "@/components/ui";
 import { usePrefs } from "@/components/providers";
@@ -8,6 +8,7 @@ import { usePrefs } from "@/components/providers";
 // Some of these pages are built by other parts of the team; we just link to them.
 const ITEMS = [
   { href: "/today", Icon: CalendarDays, title: "Today", body: "Today's doses" },
+  { href: "/meds/add", Icon: PlusCircle, title: "Add a medicine", body: "When there's no prescription to scan" },
   { href: "/locker", Icon: FolderLock, title: "Prescription locker", body: "Every prescription, safely stored" },
   { href: "/expiry", Icon: CalendarClock, title: "Expiry", body: "Strips that expire soon" },
   { href: "/refills", Icon: Package, title: "Refills", body: "Medicines running low" },

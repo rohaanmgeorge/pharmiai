@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { BellRing, Moon, Package, PlayCircle, ScanLine, Sun, Sunrise } from "lucide-react";
+import { BellRing, Moon, Package, PlayCircle, Plus, ScanLine, Sun, Sunrise } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AlertCard, DoseCard, type DoseView } from "@/components/cards";
@@ -144,6 +144,11 @@ export default function TodayPage() {
           <div className="mt-2">
             <PushBanner />
           </div>
+          {doses.length > 0 && (
+            <Link href={`/meds/add${query}`} className="mt-3 inline-flex min-h-12 items-center gap-2 rounded-full bg-white px-4 font-bold shadow-card">
+              <Plus className="size-5 text-green-700" aria-hidden /> Add a medicine (no prescription)
+            </Link>
+          )}
           {loading && (
             <div className="mt-6">
               <LoadingCards />
@@ -161,11 +166,18 @@ export default function TodayPage() {
                 title="No reminders today"
                 body="Scan a prescription and confirm each medicine. Reminders are only set for verified medicines."
                 action={
-                  <Link href="/scan">
-                    <PillButton variant="green">
-                      <ScanLine className="size-5" aria-hidden /> Scan a prescription
-                    </PillButton>
-                  </Link>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    <Link href="/scan">
+                      <PillButton variant="green">
+                        <ScanLine className="size-5" aria-hidden /> Scan a prescription
+                      </PillButton>
+                    </Link>
+                    <Link href={`/meds/add${query}`}>
+                      <PillButton>
+                        <Plus className="size-5" aria-hidden /> Add by hand
+                      </PillButton>
+                    </Link>
+                  </div>
                 }
               />
             </div>

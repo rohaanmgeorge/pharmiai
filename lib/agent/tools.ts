@@ -295,7 +295,11 @@ const getSavingsSummary: AgentTool = {
   parameters: { type: "object", properties: {} },
   async run(ctx) {
     const meds = await verifiedMedicines(ctx);
-    const { data } = await ctx.supabase.from("generic_products").select("ja_code, name, ingredients, strength, mrp, pack_size");
+    // Only generics sharing an ingredient (the full list is over the 1,000-row API limit).
+    const ingredients = [...new Set(meds.flatMap((m) => m.prescription_items.medicine_catalog.ingredients))];
+    const { data } = ingredients.length
+      ? await ctx.supabase.from("generic_products").select("ja_code, name, ingredients, strength, mrp, pack_size").overlaps("ingredients", ingredients)
+      : { data: [] };
     const generics = (data ?? []) as Generic[];
     const rows = [];
     for (const m of meds) {

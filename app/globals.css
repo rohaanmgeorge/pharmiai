@@ -77,9 +77,21 @@ body {
   line-height: 1.6;
 }
 
-:focus-visible {
-  outline: 3px solid var(--green-700);
-  outline-offset: 2px;
+/* Focus ring for keyboard users. In the base layer, so a component's own classes can override it. */
+@layer base {
+  :focus-visible {
+    outline: 3px solid var(--green-700);
+    outline-offset: 2px;
+  }
+  /* Text fields usually sit inside a rounded box: put the ring on that box, never inside it. */
+  :where(input:not([type="checkbox"], [type="radio"]), textarea, select):focus-visible {
+    outline: none;
+  }
+  :where(input:not([type="checkbox"], [type="radio"]), textarea, select)[class*="rounded"]:focus-visible,
+  [class*="rounded"]:has(> :where(input:not([type="checkbox"], [type="radio"]), textarea, select):focus-visible) {
+    outline: 3px solid var(--green-700);
+    outline-offset: 2px;
+  }
 }
 
 /* ---------- Simple looping animations (CSS, transform/opacity only) ---------- */

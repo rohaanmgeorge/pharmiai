@@ -13,19 +13,24 @@ const MAX_ROUNDS = 4;
 const LANG_NAME: Record<Lang, string> = { en: "English", ml: "Malayalam", hi: "Hindi" };
 
 function systemPrompt(lang: Lang) {
-  return `You are PharmiAI, a kind medicine reminder helper for an elderly person in India and their family.
-Reply in ${LANG_NAME[lang]} only. Keep replies to one or two short, warm sentences.
+  return `You are PharmiAI, a kind, knowledgeable medicine and health companion for an elderly person in India and their family.
+Reply in ${LANG_NAME[lang]} only. Keep replies short (two to four simple sentences), warm, and easy for an elder to understand.
 
-Rules — follow exactly:
-- Use the tools for everything. The app shows cards built from the database; you only add a short sentence around them.
-- Never diagnose. Never recommend, change, double, reduce or stop a dose. Never tell the person to take or stop a medicine.
-- Never identify a tablet from its shape, colour or markings. Use the refuse tool.
-- Medical facts ONLY by calling get_medicine_card, which shows a card. Never state uses, side effects, doses, amounts or prices in your own words.
-- Do not mention any medicine name unless a tool returned it in this conversation turn.
-- To mark a dose, call get_today_schedule to find the dose_id, then mark_dose. The app asks the person to confirm; do not claim it is done.
-- If someone needs emergency help, call start_sos. "SOS" written on a prescription means "when needed", not an emergency.
-- If unsure, or the question is not about their medicines, say exactly: "${REFUSAL[lang]}"
-- Each tool result has a "say" sentence. You may use it as your reply.`;
+What you help with:
+- Their own medicines and reminders: use get_today_schedule, mark_dose, get_medicine_card, get_expiry_list, search_locker, get_savings_summary.
+- ANY other medicine, even if it is not on their prescription: call lookup_medicine first. For "alternative", "similar", "cheaper" or "generic" questions call find_alternatives. Cards show the facts from our database; add one short helpful sentence.
+- General health and medicine questions (what a medicine type does, common side effects, storage, food and alcohol, why finishing a course matters, what a test means): answer from well-established medical knowledge in plain words. Start with "In general," and keep it general, not about this person.
+
+Safety rules — never break these:
+- Never tell this person to take, stop, start, switch, increase, reduce or double a medicine, and never give them a dose or number of tablets. Say the doctor or pharmacist decides.
+- Never diagnose ("you have…"). Describe what symptoms can mean in general only, and say to see a doctor.
+- Never identify a loose tablet from its shape, colour or markings: call refuse.
+- Only state strengths or prices that a tool returned.
+- Danger signs (chest pain, trouble breathing, fainting, stroke signs, severe allergy, overdose): tell them to call 108 now and call start_sos.
+- To mark a dose, call get_today_schedule for the dose_id, then mark_dose. The app asks them to confirm; never claim it is done.
+- "SOS" written on a prescription means "when needed", not an emergency.
+- When a question needs a personal medical decision, say: "${REFUSAL[lang]}"
+- Each tool result may have a "say" sentence you can use as your reply.`;
 }
 
 export type HistoryTurn = { role: "user" | "model"; text: string };
@@ -36,6 +41,8 @@ export type AgentReply = {
   /** Set when the guard replaced the model's text (logged by the caller, IDs only). */
   blocked?: GuardReason;
   model: string;
+  /** The words are general AI knowledge (no database card behind them): show a label. */
+  general?: boolean;
 };
 
 let client: GoogleGenAI | null = null;
@@ -90,6 +97,15 @@ async function loop(model: string, ctx: AgentContext, tools: AgentTool[], histor
 }
 
 /** Runs the tool loop, with one retry on the fallback model. Throws if both fail (caller falls back). */
+// Danger signs are handled in code, not left to the AI: the SOS button always appears.
+const DANGER =
+  /chest pain|can'?t breathe|cannot breathe|breathless|short(ness)? of breath|faint|unconscious|collapsed|stroke|face drooping|slurred|seizure|fits|severe allergy|swelling (of )?(face|throat|lips)|overdose|took too many|bleeding heavily|सीने में दर्द|सांस नहीं|साँस नहीं|बेहोश|लकवा|दौरा|നെഞ്ചുവേദന|നെഞ്ച് വേദന|ശ്വാസം കിട്ടുന്നില്ല|ബോധം|തളർന്നു|അപസ്മാര/i;
+const DANGER_SAY: Record<Lang, string> = {
+  en: "This could be an emergency. Please call 108 now, or tap SOS to alert your family.",
+  ml: "ഇത് അടിയന്തരാവസ്ഥയാകാം. ഉടൻ 108-ൽ വിളിക്കൂ, അല്ലെങ്കിൽ കുടുംബത്തെ അറിയിക്കാൻ SOS അമർത്തൂ.",
+  hi: "यह आपातकाल हो सकता है। कृपया अभी 108 पर कॉल करें, या परिवार को बताने के लिए SOS दबाएँ।",
+};
+
 export async function runAgent(input: {
   ctx: AgentContext;
   tools: AgentTool[];
@@ -99,6 +115,7 @@ export async function runAgent(input: {
   catalogNames: (text: string) => Promise<string[]>;
 }): Promise<AgentReply> {
   const { ctx, tools, history, text, catalogNames } = input;
+  if (DANGER.test(text)) return { speech: DANGER_SAY[ctx.lang], cards: [{ kind: "sos" }], model: "rule" };
   let model = AGENT_MODEL;
   let out;
   try {
@@ -121,7 +138,11 @@ export async function runAgent(input: {
   // If the lookup fails we can't check names, so we refuse rather than risk an unchecked name.
   const names = await catalogNames(`${modelText} ${toolText}`).catch(() => null);
   if (names === null) return { speech: REFUSAL[ctx.lang], cards: out.cards, blocked: "unknown_medicine", model };
-  const guard = guardReply({ text: modelText, lang: ctx.lang, catalogNames: names, toolText });
+  // Companion mode: the person's question is passed so general information is allowed,
+  // while personal instructions, diagnoses and pill identification stay blocked.
+  const guard = guardReply({ text: modelText, lang: ctx.lang, catalogNames: names, toolText, question: text });
   if (guard.blocked) return { speech: guard.text, cards: out.cards, blocked: guard.reason, model };
-  return { speech: guard.text, cards: out.cards, model };
+  // No card behind the answer = general AI knowledge; the screen labels it as such.
+  const grounded = out.cards.some((c) => ["medicine", "medicine_info", "alternatives", "doses", "savings", "expiry", "locker"].includes(c.kind));
+  return { speech: guard.text, cards: out.cards, model, general: !grounded };
 }

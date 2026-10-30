@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { ArrowUp, Camera, CheckCheck, Mic, Settings } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { AgentCards, pendingFrom, type AgentCard } from "@/components/chat/agent-cards";
+import { AgentCards, GeneralInfoNote, pendingFrom, type AgentCard } from "@/components/chat/agent-cards";
 import { askAgent, patientIdFromUrl } from "@/components/chat/ask-agent";
 import { AssistantIcon } from "@/components/illustrations";
 import { usePrefs } from "@/components/providers";
@@ -13,7 +13,7 @@ import type { Lang } from "@/lib/i18n";
 import { useApi } from "@/lib/use-api";
 
 // The conversation lives in React state only: nothing is stored, so no health data is kept on the phone.
-type Msg = { id: number; from: "user" | "ai"; text: string; time: string; cards?: AgentCard[] };
+type Msg = { id: number; from: "user" | "ai"; text: string; time: string; cards?: AgentCard[]; general?: boolean };
 
 const GREETING_ID = 1;
 const now = () => new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
@@ -63,7 +63,7 @@ export default function ChatPage() {
     setTyping(true);
     try {
       const res = await askAgent({ text, lang, history, pending });
-      setMessages((m) => [...m, { id: Date.now() + 1, from: "ai", text: res.speech, time: now(), cards: res.cards }]);
+      setMessages((m) => [...m, { id: Date.now() + 1, from: "ai", text: res.speech, time: now(), cards: res.cards, general: res.general }]);
     } catch {
       setMessages((m) => [...m, { id: Date.now() + 1, from: "ai", text: OFFLINE[lang], time: now() }]);
     } finally {
@@ -115,6 +115,7 @@ export default function ChatPage() {
                   <div className="rounded-[24px] rounded-bl-md bg-white px-4 py-3 shadow-card">
                     {/* The greeting follows the chosen language (it is read after the page loads). */}
                     <p className="text-[1.05rem]">{m.id === GREETING_ID ? GREETING[lang] : m.text}</p>
+                    {m.general && <GeneralInfoNote />}
                     <div className="mt-1 text-[0.7rem] font-semibold text-ink-2">{m.time}</div>
                   </div>
                   {m.cards && m.cards.length > 0 && (
