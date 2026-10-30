@@ -48,7 +48,7 @@ export function computeStatus(input: { a: Reading | null; b: Reading | null; cat
   const candidates = [...new Map([...ma.candidates, ...mb.candidates].map((c) => [c.id, c])).values()];
 
   if (!ma.exact && !mb.exact && candidates.length === 0) {
-    return { status: "not_recognized", catalogId: null, candidates: [], reasons: ["This medicine is not in our checked list."] };
+    return { status: "not_recognized", catalogId: null, candidates: [], reasons: ["We could not identify this medicine. Please check the name with your pharmacist."] };
   }
 
   const reasons: string[] = [];

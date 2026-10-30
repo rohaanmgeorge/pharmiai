@@ -7,7 +7,7 @@ import { normalizeCode } from "@/lib/safety/shorthand";
 import { computeStatus } from "@/lib/safety/status";
 import { requireUser } from "@/lib/server/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { catalogCandidates } from "@/lib/server/catalog";
+import { catalogCandidates, cityOf, identifyMissing } from "@/lib/server/catalog";
 
 export const maxDuration = 60; // two AI readings can take a while
 
@@ -60,6 +60,8 @@ export async function POST(request: Request) {
   ]);
 
   // 3. Zero-Guess status for every medicine line (code decides, not the AI).
+  // Names not yet in our saved list are identified by Gemini first (then saved for next time).
+  await identifyMissing(supabase, [...itemsA, ...itemsB], await cityOf(supabase, patientId));
   const catalog = await catalogCandidates(supabase, [...itemsA, ...itemsB]);
   const pairs = alignReadings(itemsA, itemsB);
   const rows = pairs.map(({ a, b }) => {

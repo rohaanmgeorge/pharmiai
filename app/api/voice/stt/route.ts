@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { fail, requireUser } from "@/lib/server/auth";
-import { sarvamReady, speechToText } from "@/lib/server/sarvam";
+import { voiceReady, speechToText } from "@/lib/server/gemini-voice";
 import type { Lang } from "@/lib/i18n";
 
 export const maxDuration = 30;
@@ -10,7 +10,7 @@ const MAX_BYTES = 3 * 1024 * 1024; // ~30 s of speech is far smaller than this
 export async function POST(request: Request) {
   const auth = await requireUser(request);
   if (auth instanceof NextResponse) return auth;
-  if (!sarvamReady()) return fail("Voice service not set up", 501);
+  if (!voiceReady()) return fail("Voice service not set up", 501);
   const form = await request.formData();
   const audio = form.get("audio");
   const lang = (["en", "ml", "hi"].includes(String(form.get("lang"))) ? form.get("lang") : "en") as Lang;

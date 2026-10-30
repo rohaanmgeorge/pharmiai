@@ -6,7 +6,7 @@ import { computeStripStatus, expiryBadge, formatExpiry, type StripReading } from
 import { canManage, canView, fail, requireUser } from "@/lib/server/auth";
 import { istDate } from "@/lib/server/time";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { catalogCandidates } from "@/lib/server/catalog";
+import { catalogCandidates, cityOf, identifyMissing } from "@/lib/server/catalog";
 
 export const maxDuration = 60; // two AI readings can take a while
 
@@ -41,7 +41,9 @@ export async function POST(request: Request) {
   const b: StripReading | null = resB.status === "fulfilled" ? resB.value.reading : null;
 
   // 3. Zero-Guess status (code decides, not the AI). No confirmation yet → never Verified here.
-  const catalog = await catalogCandidates(supabase, [a, b].map((r) => r && { name: r.brand, strength: r.strength }));
+  const named = [a, b].map((r) => r && { name: r.brand, strength: r.strength });
+  await identifyMissing(supabase, named, await cityOf(supabase, patientId));
+  const catalog = await catalogCandidates(supabase, named);
   const result = computeStripStatus({ a, b, catalog: (catalog ?? []) as CatalogEntry[] });
 
   const { data: strip, error } = await supabaseAdmin()

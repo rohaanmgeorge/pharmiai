@@ -26,3 +26,10 @@ export const FAST_THINKING = "MINIMAL";
 
 /** Give up on one reading after this long and try the fallback model once. */
 export const READING_TIMEOUT_MS = 15_000;
+
+/** Identifies medicine names (replaces the downloaded dataset). Lite model: much larger free quota. */
+export const IDENTIFY_MODEL = "gemini-3.5-flash-lite";
+
+/** Voice: listening (speech → text) and speaking (text → speech). */
+export const LISTEN_MODEL = "gemini-3.5-flash-lite";
+export const SPEAK_MODEL = "gemini-3.8-flash-lite-tts";

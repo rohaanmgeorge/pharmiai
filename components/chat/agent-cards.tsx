@@ -233,6 +233,7 @@ type AlternativesCard = {
   brands: { name: string; manufacturer: string | null; price: string | null }[];
   generics: { name: string; price: string | null }[];
   source: string;
+  estimate?: string;
 };
 
 /** Any medicine from the database (not necessarily on the prescription). */
@@ -317,7 +318,7 @@ function Alternatives({ card }: { card: AlternativesCard }) {
         card.generics.length === 0 && <p className="text-sm text-ink-2">No other brand with exactly the same ingredients and strength in our list.</p>
       )}
       <p className="border-t border-line pt-2 text-xs text-ink-2">
-        Source: {card.source} · Ask your doctor or pharmacist before switching to any of these.
+        {card.estimate && <>{card.estimate} — check at your pharmacy. </>}Source: {card.source} · Ask your doctor or pharmacist before switching to any of these.
       </p>
     </Card>
   );

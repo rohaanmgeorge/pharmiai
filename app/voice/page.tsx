@@ -80,18 +80,18 @@ export default function VoicePage() {
   const [reply, setReply] = useState<AgentAnswer | null>(null);
   // This visit's conversation, in memory only (never saved): lets "yes" answer a confirm-back.
   const [history, setHistory] = useState<Turn[]>([]);
-  // "sarvam" = server voice (works in Malayalam/Hindi on any phone); "browser" = the phone's own.
-  const [engine, setEngine] = useState<"sarvam" | "browser">("browser");
+  // "server" = Gemini voice (works in Malayalam/Hindi on any phone); "browser" = the phone's own.
+  const [engine, setEngine] = useState<"server" | "browser">("browser");
   const [heard, setHeard] = useState("");
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const recorder = useRecorder();
   const mic = useMicLevel(phase === "listening" && engine === "browser");
-  const level = engine === "sarvam" ? recorder.level : mic.level;
+  const level = engine === "server" ? recorder.level : mic.level;
 
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    api<{ sarvam: boolean }>("/api/voice/status")
-      .then((v) => setEngine(v.sarvam ? "sarvam" : "browser"))
+    api<{ server: boolean }>("/api/voice/status")
+      .then((v) => setEngine(v.server ? "server" : "browser"))
       .catch(() => {})
       .finally(() => setReady(true));
   }, []);
@@ -107,7 +107,7 @@ export default function VoicePage() {
     setSeconds(0);
     setHeard("");
     setVoiceError(null);
-    if (engine === "sarvam") {
+    if (engine === "server") {
       if (await recorder.start()) setPhase("listening");
       return;
     }
@@ -147,7 +147,7 @@ export default function VoicePage() {
   }
 
   const confirm = async () => {
-    if (engine === "sarvam") {
+    if (engine === "server") {
       const audio = await recorder.stop();
       if (!audio) return setPhase("idle");
       setPhase("thinking");
@@ -238,7 +238,7 @@ export default function VoicePage() {
             >
               {phase === "idle" && <span className="text-ink-2">{voiceError ?? recorder.error ?? "Tap the mic and ask about your medicines"}</span>}
               {phase === "thinking" && <span className="text-ink-2">{heard ? `“${heard}”` : "Let me check…"}</span>}
-              {phase === "listening" && engine === "sarvam" && <span className="text-ink-2">{t("listening")} Tap ✓ when you finish.</span>}
+              {phase === "listening" && engine === "server" && <span className="text-ink-2">{t("listening")} Tap ✓ when you finish.</span>}
               {phase === "listening" && engine === "browser" && (
                 <>
                   {words.map((w, i) => (
@@ -287,7 +287,7 @@ export default function VoicePage() {
         {phase === "listening" ? timer : "00:00"}
       </div>
       <p className="mt-3 text-center text-xs text-ink-2">
-        {engine === "sarvam" ? "Indian-language voice (Sarvam AI)." : stt.supported ? (mic.real ? "Using your microphone" : "") : "Speech recognition not available in this browser — showing a demo."}{" "}
+        {engine === "server" ? "Voice by Gemini AI." : stt.supported ? (mic.real ? "Using your microphone" : "") : "Speech recognition not available in this browser — showing a demo."}{" "}
         {t("disclaimer")}
       </p>
     </main>

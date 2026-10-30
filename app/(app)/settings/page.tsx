@@ -14,7 +14,7 @@ import { LANGS, type Lang } from "@/lib/i18n";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useApi } from "@/lib/use-api";
 
-type Profile = { name: string; lang: Lang; blood_group: string | null; allergies: string[]; conditions: string[] };
+type Profile = { name: string; lang: Lang; blood_group: string | null; allergies: string[]; conditions: string[]; city: string | null };
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const field = "min-h-12 w-full rounded-sm border border-line bg-surface px-4 text-base outline-none focus:border-green-700";
 
@@ -35,6 +35,7 @@ function ProfileForm({ profile }: { profile: Profile }) {
   const [blood, setBlood] = useState(profile.blood_group ?? "");
   const [allergies, setAllergies] = useState(profile.allergies.join(", "));
   const [conditions, setConditions] = useState(profile.conditions.join(", "));
+  const [city, setCity] = useState(profile.city ?? "");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -43,7 +44,7 @@ function ProfileForm({ profile }: { profile: Profile }) {
     setBusy(true);
     setNote(null);
     try {
-      await api("/api/profile", { method: "PATCH", json: { name, bloodGroup: blood, allergies, conditions } });
+      await api("/api/profile", { method: "PATCH", json: { name, bloodGroup: blood, allergies, conditions, city } });
       setNote({ ok: true, text: "Saved" });
     } catch (err) {
       setNote({ ok: false, text: (err as Error).message });
@@ -75,6 +76,10 @@ function ProfileForm({ profile }: { profile: Profile }) {
         <label className="block">
           <span className="mb-1 block text-sm font-bold text-ink-2">Conditions (separate with commas)</span>
           <input className={field} value={conditions} onChange={(e) => setConditions(e.target.value)} placeholder="e.g. Diabetes, High BP" />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm font-bold text-ink-2">City (for local medicine price estimates)</span>
+          <input className={field} value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Kochi" autoComplete="address-level2" />
         </label>
         <div className="flex items-center gap-3">
           <PillButton type="submit" variant="green" disabled={busy}>

@@ -13,7 +13,7 @@ function list(v: unknown): string[] | null {
     .slice(0, 20);
 }
 
-// PATCH /api/profile { name?, lang?, bloodGroup?, allergies?, conditions? } — my own profile.
+// PATCH /api/profile { name?, lang?, bloodGroup?, allergies?, conditions?, city? } — my own profile.
 // User client: RLS "update own profile" applies (caregivers can't change these fields).
 export async function PATCH(request: Request) {
   const auth = await requireUser(request);
@@ -46,9 +46,14 @@ export async function PATCH(request: Request) {
       patch[column] = value;
     }
   }
+  if (body.city !== undefined) {
+    // Used only for AI price estimates ("location-specific rates").
+    const city = typeof body.city === "string" ? body.city.trim().slice(0, 80) : "";
+    patch.city = city || null;
+  }
   if (Object.keys(patch).length === 0) return fail("Nothing to change");
 
-  const { data, error } = await supabase.from("profiles").update(patch).eq("id", user.id).select("name, lang, blood_group, allergies, conditions").single();
+  const { data, error } = await supabase.from("profiles").update(patch).eq("id", user.id).select("name, lang, blood_group, allergies, conditions, city").single();
   if (error) return fail("Could not save. Please try again.", 500);
   return NextResponse.json({ profile: data });
 }

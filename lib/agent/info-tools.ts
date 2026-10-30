@@ -1,7 +1,8 @@
 import "server-only";
 import { factSource } from "@/lib/safety/medication-math";
 import { type CatalogEntry, matchName, normalizeStrength } from "@/lib/safety/match";
-import { catalogCandidates } from "@/lib/server/catalog";
+import { suggestAlternatives } from "@/lib/ai/identify-medicine";
+import { catalogCandidates, cityOf, identifyMissing } from "@/lib/server/catalog";
 import type { AgentCard, AgentTool } from "./types";
 
 // Tools for questions about ANY medicine (not only the person's prescription).
@@ -22,16 +23,25 @@ type Row = CatalogEntry & {
   side_effects_hi: string | null;
   source: string;
   reviewed: boolean | null;
+  price_note: string | null;
 };
 
 const str = (v: unknown) => (typeof v === "string" ? v.trim().slice(0, 120) : "");
 const sameSet = (a: string[], b: string[]) => a.length > 0 && [...a].map((x) => x.toLowerCase()).sort().join("|") === [...b].map((x) => x.toLowerCase()).sort().join("|");
 
-/** Exact catalog match for a spoken/typed name, or the look-alike list (never auto-picked). */
+/**
+ * Exact match for a spoken/typed name in our saved list — identified by Gemini first if it isn't
+ * there yet — or the look-alike list (never auto-picked).
+ */
 async function find(ctx: Parameters<AgentTool["run"]>[0], name: string) {
   const strength = name.match(/\d+(?:\.\d+)?\s*(mg|mcg|g|ml)?/i)?.[0] ?? null;
-  const candidates = await catalogCandidates(ctx.supabase, [{ name, strength }]);
-  const m = matchName(name, candidates, strength);
+  let candidates = await catalogCandidates(ctx.supabase, [{ name, strength }]);
+  let m = matchName(name, candidates, strength);
+  if (!m.exact) {
+    await identifyMissing(ctx.supabase, [{ name, strength }], await cityOf(ctx.supabase, ctx.patientId));
+    candidates = await catalogCandidates(ctx.supabase, [{ name, strength }]);
+    m = matchName(name, candidates, strength);
+  }
   return { exact: m.exact, choices: m.candidates };
 }
 
@@ -63,7 +73,7 @@ const lookupMedicine: AgentTool = {
       manufacturer: row.manufacturer,
       uses: row[`uses_${ctx.lang}`] ?? row.uses_en,
       sideEffects: row[`side_effects_${ctx.lang}`] ?? row.side_effects_en,
-      price: row.mrp ? `₹${row.mrp}${row.pack_label ? ` · ${row.pack_label}` : row.pack_size ? ` for ${row.pack_size}` : ""}` : null,
+      price: row.mrp ? `₹${row.mrp}${row.pack_label ? ` · ${row.pack_label}` : row.pack_size ? ` for ${row.pack_size}` : ""}${row.price_note ? ` (${row.price_note})` : ""}` : null,
       source: factSource(row),
     };
     // The model gets the composition (so it can explain it simply), not the uses/side-effect text.
@@ -89,24 +99,17 @@ const findAlternatives: AgentTool = {
     const base = await fullRow(ctx, exact.id);
     if (!base) return { data: { found: false } };
     const strength = normalizeStrength(base.strength);
-    // Same ingredient set AND same strength — anything else is not an alternative.
-    const { data: brands } = await ctx.supabase
-      .from("medicine_catalog")
-      .select("id, name, ingredients, strength, manufacturer, mrp, pack_size, pack_label")
-      .contains("ingredients", base.ingredients)
-      .neq("id", base.id)
-      .limit(200);
-    const sameBrands = (brands ?? [])
-      .filter((b) => sameSet(b.ingredients, base.ingredients) && normalizeStrength(b.strength) === strength)
-      .sort((a, b) => (a.mrp ?? 1e9) / (a.pack_size || 1) - (b.mrp ?? 1e9) / (b.pack_size || 1))
-      .slice(0, 6);
+    // Other brands: Gemini's knowledge (the downloaded brand list was removed), prices as estimates.
+    const city = await cityOf(ctx.supabase, ctx.patientId);
+    const sameBrands = await suggestAlternatives(base, city).catch(() => []);
     const { data: generics } = await ctx.supabase.from("generic_products").select("name, ingredients, strength, mrp, pack_size").contains("ingredients", base.ingredients);
     const sameGenerics = (generics ?? []).filter((g) => sameSet(g.ingredients, base.ingredients) && normalizeStrength(g.strength) === strength).slice(0, 3);
     const perUnit = (mrp: number | null, pack: number | null) => (mrp && pack ? `₹${(mrp / pack).toFixed(2)} each` : null);
     const card: AgentCard = {
       kind: "alternatives",
       base: { name: base.name, composition: `${base.ingredients.join(" + ")} ${base.strength}`, price: perUnit(base.mrp, base.pack_size) },
-      brands: sameBrands.map((b) => ({ name: b.name, manufacturer: b.manufacturer, price: perUnit(b.mrp, b.pack_size) })),
+      brands: sameBrands.map((b) => ({ name: b.name, manufacturer: b.manufacturer, price: perUnit(b.priceInr, b.packSize) })),
+      estimate: city ? `Brand prices are AI estimates for ${city}` : "Brand prices are AI estimates",
       generics: sameGenerics.map((g) => ({ name: g.name, price: perUnit(g.mrp, g.pack_size) })),
       source: factSource(base),
     };

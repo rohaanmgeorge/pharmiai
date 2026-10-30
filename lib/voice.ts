@@ -187,7 +187,7 @@ export function speak(text: string, speechLang: string): boolean {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Sarvam AI voice (server): reliable Malayalam / Hindi / English on any phone.
+// Server voice (Gemini): Malayalam / Hindi / English on any phone.
 // One microphone stream feeds both the recorder and the waveform, so they never fight.
 // ---------------------------------------------------------------------------------------------
 
@@ -266,7 +266,7 @@ export function useRecorder() {
   return { level, recording, error, start, stop, cancel };
 }
 
-/** Sends a recording to our server (Sarvam) and returns what was said. */
+/** Sends a recording to our server (Gemini) and returns what was said. */
 export async function transcribe(audio: Blob, lang: string): Promise<string> {
   const form = new FormData();
   form.append("audio", audio, "speech");
@@ -311,7 +311,7 @@ export function unlockAudio() {
 }
 
 /**
- * Reads text aloud: Sarvam voice first (works in Malayalam/Hindi on every phone),
+ * Reads text aloud: Gemini voice first (works in Malayalam/Hindi on every phone),
  * then the phone's own voice. Returns false if neither could speak.
  */
 export async function sayAloud(text: string, lang: string, speechLang: string): Promise<boolean> {

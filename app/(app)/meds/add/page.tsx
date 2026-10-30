@@ -1,6 +1,6 @@
 "use client";
 
-import { BellRing, Check, Search, TriangleAlert, X } from "lucide-react";
+import { BellRing, Check, Search, Sparkles, TriangleAlert, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { usePrefs } from "@/components/providers";
@@ -36,6 +36,23 @@ function MedicineSearch({ onPick }: { onPick: (r: Result) => void }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Result[]>([]);
   const [searching, setSearching] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiNote, setAiNote] = useState<string | null>(null);
+
+  // Not in the saved list yet: ask Gemini to identify it (then it is saved for everyone).
+  async function lookUpWithAi() {
+    setAiBusy(true);
+    setAiNote(null);
+    try {
+      const res = await api<{ results: Result[]; message?: string }>("/api/catalog/identify", { method: "POST", json: { name: q.trim() } });
+      setResults(res.results);
+      if (res.message) setAiNote(res.message);
+    } catch (e) {
+      setAiNote((e as Error).message);
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   // Wait until typing pauses, then search (keeps it fast on slow phones).
   useEffect(() => {
@@ -65,10 +82,14 @@ function MedicineSearch({ onPick }: { onPick: (r: Result) => void }) {
       </label>
       <div className="mt-3 space-y-2" aria-live="polite">
         {searching && <p className="px-1 text-sm text-ink-2">Searching…</p>}
-        {!searching && q.trim().length >= 2 && shown.length === 0 && (
+        {!searching && q.trim().length >= 2 && (
           <Card className="p-4 text-sm">
-            <p className="font-bold">Not in our medicine list.</p>
-            <p className="text-ink-2">Check the spelling on the strip, or scan the strip instead. We only add medicines we can match exactly, so reminders are never for the wrong one.</p>
+            <p className="font-bold">{shown.length ? "Not the right one?" : "Not in our saved list yet."}</p>
+            <p className="text-ink-2">Gemini AI can identify it from the name. Check the result against the strip before choosing it.</p>
+            <PillButton size="sm" variant="green" className="mt-3" disabled={aiBusy} onClick={lookUpWithAi}>
+              <Sparkles className="size-4" aria-hidden /> {aiBusy ? "Looking up…" : `Look up “${q.trim()}” with AI`}
+            </PillButton>
+            {aiNote && <p className="mt-2 font-semibold text-warn">{aiNote}</p>}
           </Card>
         )}
         {shown.map((r) => (
@@ -78,6 +99,7 @@ function MedicineSearch({ onPick }: { onPick: (r: Result) => void }) {
               {r.ingredients.join(" + ")} · {r.strength}
             </div>
             {r.manufacturer && <div className="text-xs text-ink-2">{r.manufacturer}</div>}
+            {!r.reviewed && <div className="mt-1 text-xs font-semibold text-warn">Identified by AI · not pharmacist-reviewed</div>}
           </button>
         ))}
       </div>
