@@ -15,8 +15,21 @@ const OUT = "data/private/catalog-todo.csv";
 const MIME: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" };
 
 const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
-const { data: catalog, error } = await db.from("medicine_catalog").select("id, name, ingredients, strength");
-if (error) throw error;
+
+/** Only the catalog rows that could match what was read (the API returns max 1,000 rows). */
+async function candidatesFor(items: { name: string | null; strength: string | null }[]) {
+  const keys = new Set<string>();
+  for (const i of items) {
+    if (!i.name) continue;
+    keys.add(i.name);
+    const n = i.strength?.match(/\d+(?:\.\d+)?/)?.[0];
+    if (n) keys.add(`${i.name} ${n}`);
+  }
+  if (keys.size === 0) return [] as CatalogEntry[];
+  const { data, error } = await db.rpc("catalog_candidates", { p_keys: [...keys] });
+  if (error) throw error;
+  return (data ?? []) as CatalogEntry[];
+}
 
 // name as read → how many readings saw it, and the strength they saw
 const missing = new Map<string, { seen: number; strength: string | null; files: Set<string> }>();
@@ -25,6 +38,7 @@ for (const file of readdirSync(DIR).filter((f) => MIME[extname(f).toLowerCase()]
   const image = { data: readFileSync(join(DIR, file)).toString("base64"), mimeType: MIME[extname(file).toLowerCase()] };
   const results = await Promise.all([readingA(image).catch(() => null), readingB(image).catch(() => null)]);
   let found = 0;
+  const catalog = await candidatesFor(results.flatMap((r) => r?.items ?? []));
   for (const r of results) {
     for (const item of r?.items ?? []) {
       if (!item.name) continue;

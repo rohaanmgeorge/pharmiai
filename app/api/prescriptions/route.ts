@@ -7,6 +7,7 @@ import { normalizeCode } from "@/lib/safety/shorthand";
 import { computeStatus } from "@/lib/safety/status";
 import { requireUser } from "@/lib/server/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { catalogCandidates } from "@/lib/server/catalog";
 
 export const maxDuration = 60; // two AI readings can take a while
 
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
   ]);
 
   // 3. Zero-Guess status for every medicine line (code decides, not the AI).
-  const { data: catalog } = await supabase.from("medicine_catalog").select("id, name, ingredients, strength");
+  const catalog = await catalogCandidates(supabase, [...itemsA, ...itemsB]);
   const pairs = alignReadings(itemsA, itemsB);
   const rows = pairs.map(({ a, b }) => {
     const result = computeStatus({ a, b, catalog: (catalog ?? []) as CatalogEntry[] });

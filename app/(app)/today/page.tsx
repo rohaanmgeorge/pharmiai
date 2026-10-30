@@ -54,6 +54,7 @@ function ProgressRing({ done, total }: { done: number; total: number }) {
 /** Asks for notification permission from a tap (browsers require a tap). */
 function PushBanner() {
   const [state, setState] = useState<PushState | null>(null);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     pushState().then(setState);
   }, []);
@@ -71,9 +72,23 @@ function PushBanner() {
       }
       action={
         state === "off" && (
-          <PillButton size="sm" variant="green" onClick={async () => setState(await enablePush().catch(() => "off" as const))}>
-            <BellRing className="size-4" aria-hidden /> Turn on
-          </PillButton>
+          <div className="space-y-2">
+            <PillButton
+              size="sm"
+              variant="green"
+              onClick={async () => {
+                setError(null);
+                try {
+                  setState(await enablePush());
+                } catch (e) {
+                  setError((e as Error).message);
+                }
+              }}
+            >
+              <BellRing className="size-4" aria-hidden /> Turn on
+            </PillButton>
+            {error && <p className="text-sm font-semibold text-danger">{error}</p>}
+          </div>
         )
       }
     />

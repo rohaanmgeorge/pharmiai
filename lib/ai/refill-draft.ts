@@ -1,8 +1,8 @@
 import "server-only";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, type ThinkingLevel } from "@google/genai";
 import type { Lang } from "@/lib/i18n";
 import { type RefillInput, safeRefillText } from "@/lib/safety/refill-guard";
-import { AGENT_MODEL, FALLBACK_MODEL } from "./models";
+import { AGENT_MODEL, FALLBACK_MODEL, FAST_THINKING } from "./models";
 
 // The refill agent's ONLY AI step: wording a short, polite reorder message.
 // Medicine name, strength and quantity come from the database and our code; the guard in
@@ -32,12 +32,19 @@ let client: GoogleGenAI | null = null;
 const ai = () => (client ??= new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! }));
 
 async function ask(model: string, text: string): Promise<string | null> {
-  const res = await ai().models.generateContent({ model, contents: [{ role: "user", parts: [{ text }] }] });
+  const res = await ai().models.generateContent({
+    model,
+    contents: [{ role: "user", parts: [{ text }] }],
+    config: { thinkingConfig: { thinkingLevel: FAST_THINKING as ThinkingLevel }, abortSignal: AbortSignal.timeout(15_000) },
+  });
   return res.text?.trim() || null;
 }
 
-/** Drafts the message. Never throws: any AI problem means the fixed template is used. */
-export async function draftRefillMessage(lang: Lang, input: RefillInput, catalogNames: string[]) {
+/**
+ * Drafts the message. Never throws: any AI problem means the fixed template is used.
+ * `namesIn(text)` returns catalog medicine names that may appear in a text (for the guard).
+ */
+export async function draftRefillMessage(lang: Lang, input: RefillInput, namesIn: (text: string) => Promise<string[]>) {
   let raw: string | null = null;
   if (process.env.GEMINI_API_KEY) {
     const text = prompt(lang, input);
@@ -48,5 +55,5 @@ export async function draftRefillMessage(lang: Lang, input: RefillInput, catalog
     }
   }
   const filled = raw?.replaceAll(PATIENT, input.patient.trim() || "").replaceAll(PHARMACY, input.pharmacy.trim() || "").replace(/\s+([,.!?।])/g, "$1") ?? null;
-  return safeRefillText(filled, lang, input, catalogNames);
+  return safeRefillText(filled, lang, input, filled ? await namesIn(filled).catch(() => []) : []);
 }

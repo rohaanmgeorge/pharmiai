@@ -49,3 +49,8 @@ export function predictRunout(stock: number, dosesPerDay: number, today: string)
   d.setUTCDate(d.getUTCDate() + daysLeft);
   return { daysLeft, runoutDate: d.toISOString().slice(0, 10) };
 }
+
+/** The source line shown under medicine facts. Dataset rows are clearly marked as not reviewed. */
+export function factSource(row: { source: string; reviewed?: boolean | null }): string {
+  return row.reviewed === false ? `${row.source} · not pharmacist-reviewed` : row.source;
+}

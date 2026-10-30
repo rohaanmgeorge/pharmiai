@@ -11,14 +11,14 @@ import { useClientValue } from "@/lib/client";
 type Phase = "aiming" | "reading" | "done";
 type Mode = "prescription" | "medicine";
 
-/** Shrinks a photo to at most 1600px and JPEG, so uploads stay well under the 5 MB limit. */
+/** Shrinks a photo to at most 1280px and JPEG, so uploads stay well under the 5 MB limit. */
 async function toJpeg(source: CanvasImageSource, width: number, height: number): Promise<Blob> {
-  const scale = Math.min(1, 1600 / Math.max(width, height));
+  const scale = Math.min(1, 1280 / Math.max(width, height));
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(width * scale);
   canvas.height = Math.round(height * scale);
   canvas.getContext("2d")!.drawImage(source, 0, 0, canvas.width, canvas.height);
-  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Could not read the photo"))), "image/jpeg", 0.85));
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("Could not read the photo"))), "image/jpeg", 0.8));
 }
 
 async function fileToJpeg(file: File): Promise<Blob> {
@@ -42,6 +42,24 @@ export default function ScanPage() {
   const mode = modeChoice ?? initialMode;
   const [result, setResult] = useState<{ count: number; needs: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState<"upload" | "read">("upload");
+  const [seconds, setSeconds] = useState(0);
+
+  // A visible timer, so people know it's working (reading twice takes a few seconds).
+  useEffect(() => {
+    if (phase !== "reading") return;
+    const start = Date.now();
+    const t = setInterval(() => {
+      const s = Math.floor((Date.now() - start) / 1000);
+      setSeconds(s);
+      if (s >= 2) setStep("read"); // upload of a ~200 KB photo is done by then on most connections
+    }, 500);
+    return () => {
+      clearInterval(t);
+      setSeconds(0);
+      setStep("upload");
+    };
+  }, [phase]);
 
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -180,7 +198,7 @@ export default function ScanPage() {
             className="rounded-full bg-black/70 px-4 py-2 text-sm font-semibold backdrop-blur"
             role="status"
           >
-            {phase === "aiming" ? (mode === "medicine" ? "Show the name and expiry date…" : "Please hold still…") : phase === "reading" ? "Reading twice to be sure…" : "Done — let's check together"}
+            {phase === "aiming" ? (mode === "medicine" ? "Show the name and expiry date…" : "Please hold still…") : phase === "reading" ? `${step === "upload" ? "Uploading photo…" : "Reading twice to be sure…"} ${seconds}s` : "Done — let's check together"}
           </motion.div>
         </AnimatePresence>
         {error && (

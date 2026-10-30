@@ -10,7 +10,8 @@
     "test": "vitest run",
     "import-catalog": "node --env-file=.env.local scripts/import-catalog.mts",
     "eval": "tsx --conditions=react-server --env-file=.env.local scripts/eval-prescriptions.mts",
-    "find-missing": "tsx --conditions=react-server --env-file=.env.local scripts/find-missing-medicines.mts"
+    "find-missing": "tsx --conditions=react-server --env-file=.env.local scripts/find-missing-medicines.mts",
+    "import-dataset": "node --env-file=.env.local scripts/import-dataset.mts"
   },
   "dependencies": {
     "@google/genai": "^2.32.0",

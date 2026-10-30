@@ -1,6 +1,6 @@
 import "server-only";
-import { GoogleGenAI, type Content, type Part } from "@google/genai";
-import { AGENT_MODEL, FALLBACK_MODEL } from "@/lib/ai/models";
+import { GoogleGenAI, type Content, type Part, type ThinkingLevel } from "@google/genai";
+import { AGENT_MODEL, FALLBACK_MODEL, FAST_THINKING } from "@/lib/ai/models";
 import type { Lang } from "@/lib/i18n";
 import { guardReply, REFUSAL, type GuardReason } from "@/lib/safety/voice-guard";
 import type { AgentCard, AgentContext, AgentTool } from "./types";
@@ -54,6 +54,8 @@ async function loop(model: string, ctx: AgentContext, tools: AgentTool[], histor
       config: {
         systemInstruction: systemPrompt(ctx.lang),
         temperature: 0.2,
+        thinkingConfig: { thinkingLevel: FAST_THINKING as ThinkingLevel }, // quick spoken replies
+        abortSignal: AbortSignal.timeout(15_000),
         tools: [{ functionDeclarations: tools.map((t) => ({ name: t.name, description: t.description, parametersJsonSchema: t.parameters })) }],
       },
     });
@@ -93,7 +95,8 @@ export async function runAgent(input: {
   tools: AgentTool[];
   history: HistoryTurn[];
   text: string;
-  catalogNames: string[];
+  /** Catalog names that may appear in a text (looked up in the database, for the guard). */
+  catalogNames: (text: string) => Promise<string[]>;
 }): Promise<AgentReply> {
   const { ctx, tools, history, text, catalogNames } = input;
   let model = AGENT_MODEL;
@@ -114,7 +117,11 @@ export async function runAgent(input: {
   const modelText = out.text.trim();
   if (!modelText) return { speech: lastSay?.say ?? REFUSAL[ctx.lang], cards: out.cards, model };
 
-  const guard = guardReply({ text: modelText, lang: ctx.lang, catalogNames, toolText: JSON.stringify(out.toolData) + JSON.stringify(out.cards) });
+  const toolText = JSON.stringify(out.toolData) + JSON.stringify(out.cards);
+  // If the lookup fails we can't check names, so we refuse rather than risk an unchecked name.
+  const names = await catalogNames(`${modelText} ${toolText}`).catch(() => null);
+  if (names === null) return { speech: REFUSAL[ctx.lang], cards: out.cards, blocked: "unknown_medicine", model };
+  const guard = guardReply({ text: modelText, lang: ctx.lang, catalogNames: names, toolText });
   if (guard.blocked) return { speech: guard.text, cards: out.cards, blocked: guard.reason, model };
   return { speech: guard.text, cards: out.cards, model };
 }

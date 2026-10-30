@@ -15,3 +15,14 @@ export const AGENT_MODEL = "gemini-3.5-flash-lite";
 
 /** If a model is overloaded (503), try this one once instead. */
 export const FALLBACK_MODEL = "gemini-3.5-flash-lite";
+
+/**
+ * How long the model "thinks" before answering. Measured 2026-10-30 on a prescription photo:
+ * gemini-3.5-flash default ≈ 9.8 s, LOW ≈ 2–4 s, MINIMAL ≈ 1.8 s — same medicine names.
+ * Reading A keeps a little reasoning for handwriting; everything else answers fast.
+ */
+export const READING_A_THINKING = "LOW";
+export const FAST_THINKING = "MINIMAL";
+
+/** Give up on one reading after this long and try the fallback model once. */
+export const READING_TIMEOUT_MS = 15_000;

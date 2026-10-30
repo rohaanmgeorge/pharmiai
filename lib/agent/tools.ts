@@ -6,6 +6,7 @@ import { slotOf } from "@/lib/safety/slots";
 import { signedPhoto } from "@/lib/server/auth";
 import { addDays, istClock, istDate, istMoment } from "@/lib/server/time";
 import type { AgentCard, AgentContext, AgentTool, ToolResult } from "./types";
+import { factSource } from "@/lib/safety/medication-math";
 
 // The assistant's tools. Every tool reads the database AS the signed-in user (RLS applies)
 // for ctx.patientId. Facts the person sees go into cards built from rows; the model only
@@ -225,6 +226,7 @@ type MedRow = {
       side_effects_ml: string | null;
       side_effects_hi: string | null;
       source: string;
+      reviewed: boolean | null;
     };
   };
 };
@@ -233,7 +235,7 @@ async function verifiedMedicines(ctx: AgentContext): Promise<MedRow[]> {
   const { data } = await ctx.supabase
     .from("schedules")
     .select(
-      "id, slot_times, prescription_items!inner(status, strength, medicine_catalog!inner(id, name, form, strength, ingredients, mrp, pack_size, uses_en, uses_ml, uses_hi, side_effects_en, side_effects_ml, side_effects_hi, source))",
+      "id, slot_times, prescription_items!inner(status, strength, medicine_catalog!inner(id, name, form, strength, ingredients, mrp, pack_size, uses_en, uses_ml, uses_hi, side_effects_en, side_effects_ml, side_effects_hi, source, reviewed))",
     )
     .eq("patient_id", ctx.patientId)
     .eq("active", true)
@@ -270,7 +272,7 @@ const getMedicineCard: AgentTool = {
       form: c.form,
       uses,
       sideEffects,
-      source: c.source,
+      source: factSource(c),
       inEnglish: ctx.lang !== "en" && !c[`uses_${ctx.lang}`],
     };
     // The model sees only that a card was shown — not the facts, so it can't reword them.

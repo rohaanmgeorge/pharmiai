@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { fallbackReply } from "@/lib/agent/fallback";
 import { runAgent, type HistoryTurn } from "@/lib/agent/run";
 import { refillTools } from "@/lib/agent/refill-tools";
@@ -7,6 +6,7 @@ import { agentTools, markDose, type DoseAction, type ToolContext } from "@/lib/a
 import type { Lang } from "@/lib/i18n";
 import { safetyLog } from "@/lib/safety/log";
 import { canView, fail, requireUser } from "@/lib/server/auth";
+import { catalogNamesIn } from "@/lib/server/catalog";
 
 // POST /api/agent  { text, lang, patientId?, history?, pending? } → { speech, cards }
 // history: the last few turns ({ role: "user" | "model", text }) so the AI keeps context.
@@ -23,14 +23,6 @@ const NO = /^(no|nope|nahi|nahin|नहीं|ना|വേണ്ട|ഇല്�
 
 const NOT_DONE: Record<Lang, string> = { en: "Okay, I haven't changed anything.", ml: "ശരി, ഒന്നും മാറ്റിയിട്ടില്ല.", hi: "ठीक है, मैंने कुछ नहीं बदला।" };
 
-// Medicine names for the output guard. The catalog changes rarely, so keep it for 10 minutes.
-let names: { list: string[]; at: number } | null = null;
-async function catalogNames(supabase: SupabaseClient): Promise<string[]> {
-  if (names && Date.now() - names.at < 10 * 60_000) return names.list;
-  const { data } = await supabase.from("medicine_catalog").select("name");
-  names = { list: (data ?? []).map((r) => r.name as string), at: Date.now() };
-  return names.list;
-}
 
 export async function POST(request: Request) {
   const auth = await requireUser(request);
@@ -72,7 +64,7 @@ export async function POST(request: Request) {
   // 2. The AI, if we have a key; otherwise (or if it fails) the keyword fallback.
   if (process.env.GEMINI_API_KEY) {
     try {
-      const out = await runAgent({ ctx, tools: [...agentTools, ...refillTools], history, text, catalogNames: await catalogNames(supabase) });
+      const out = await runAgent({ ctx, tools: [...agentTools, ...refillTools], history, text, catalogNames: (t) => catalogNamesIn(supabase, t) });
       if (out.blocked) {
         // IDs and a reason code only — never the text.
         await safetyLog([{ actor: user.id, patientId, event: "voice_guard_block", payload: { reason: out.blocked, model: out.model } }]).catch(() =>

@@ -4,6 +4,7 @@ import type { CatalogEntry } from "@/lib/safety/match";
 import { computeStripStatus, parseExpiry, type StripReading } from "@/lib/safety/strip";
 import { canManage, fail, requireUser } from "@/lib/server/auth";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { catalogCandidates } from "@/lib/server/catalog";
 
 // POST /api/strips/:id/confirm
 //   { catalogId, expiry: "YYYY-MM", batch?, quantity?, scheduleId?, addToStock? }
@@ -35,7 +36,9 @@ export async function POST(request: Request, ctx: RouteContext<"/api/strips/[id]
   if (!(await canManage(supabase, strip.patient_id))) return fail("Not allowed", 403);
   if (strip.status === "verified") return NextResponse.json({ status: "verified", reasons: [], linked: false });
 
-  const { data: catalog } = await supabase.from("medicine_catalog").select("id, name, ingredients, strength");
+  const readA = strip.reading_a as StripReading | null;
+  const readB = strip.reading_b as StripReading | null;
+  const catalog = await catalogCandidates(supabase, [readA, readB].map((r) => r && { name: r.brand, strength: r.strength }));
   const result = computeStripStatus({
     a: strip.reading_a as StripReading | null,
     b: strip.reading_b as StripReading | null,

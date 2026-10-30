@@ -50,6 +50,9 @@ export async function runTick(admin: SupabaseClient, patientIds?: string[]) {
   const { data: profileRows } = await pq;
   const profiles = new Map((profileRows ?? []).map((p) => [p.id as string, p as Profile]));
 
+  // Heartbeat: lets Settings show "reminder clock last ran at hh:mm" (only for the real clock).
+  if (!patientIds) await admin.from("sent_notifications").upsert({ key: "heartbeat", sent_at: now.toISOString() });
+
   // 1. Dose rows for today and tomorrow; courses that ended stop.
   await ensureDoseEvents(admin, patientIds);
   await scope(admin.from("schedules").update({ active: false }).eq("active", true).lt("end_date", today));

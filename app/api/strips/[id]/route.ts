@@ -5,6 +5,7 @@ import { slotOf } from "@/lib/safety/slots";
 import { expiryBadge, formatExpiry } from "@/lib/safety/strip";
 import { canManage, fail, requireUser, signedPhoto } from "@/lib/server/auth";
 import { istDate } from "@/lib/server/time";
+import { factSource } from "@/lib/safety/medication-math";
 
 type ActiveSchedule = {
   id: string;
@@ -74,7 +75,7 @@ export async function GET(request: Request, ctx: RouteContext<"/api/strips/[id]"
     info = {
       uses: entry[`uses_${lang}`] ?? entry.uses_en ?? null,
       sideEffects: entry[`side_effects_${lang}`] ?? entry.side_effects_en ?? null,
-      source: entry.source,
+      source: factSource(entry),
     };
     // Jan Aushadhi alternative: exactly the same ingredients AND the same strength.
     const { data: generics } = await supabase.from("generic_products").select("name, ingredients, strength, mrp, pack_size").contains("ingredients", entry.ingredients);

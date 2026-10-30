@@ -1,14 +1,15 @@
 "use client";
 
-import { BellRing, ChevronRight, Lock, LogOut, Trash2, Users } from "lucide-react";
+import { ChevronRight, Lock, LogOut, Trash2, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { CardSettings } from "@/components/emergency/card-settings";
 import { usePrefs } from "@/components/providers";
 import { ErrorCard, LoadingCards } from "@/components/states";
 import { Card, cn, PageHeader, PillButton, SectionTitle, Toggle } from "@/components/ui";
-import { api, enablePush, pushState, type PushState } from "@/lib/api-client";
+import { api } from "@/lib/api-client";
+import { PushPanel } from "@/components/push-panel";
 import { LANGS, type Lang } from "@/lib/i18n";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useApi } from "@/lib/use-api";
@@ -86,32 +87,6 @@ function ProfileForm({ profile }: { profile: Profile }) {
   );
 }
 
-function PushRow() {
-  const [state, setState] = useState<PushState | null>(null);
-  useEffect(() => {
-    pushState().then(setState);
-  }, []);
-  const body =
-    state === "on"
-      ? "On for this device. Dose reminders and SOS alerts arrive here."
-      : state === "denied"
-        ? "Blocked. Allow notifications for this site in your browser settings."
-        : state === "unsupported"
-          ? "On iPhone, add PharmiAI to your Home Screen first."
-          : "Off for this device.";
-  return (
-    <Row title="Notifications" body={body}>
-      {state === "off" ? (
-        <PillButton size="sm" variant="green" className="min-h-12" onClick={async () => setState(await enablePush().catch(() => "off" as const))}>
-          <BellRing className="size-4" aria-hidden /> Turn on
-        </PillButton>
-      ) : (
-        <span className={cn("rounded-full px-3 py-1 text-xs font-bold", state === "on" ? "bg-ok-soft text-ok" : "bg-surface-2 text-ink-2")}>{state === "on" ? "On" : "Off"}</span>
-      )}
-    </Row>
-  );
-}
-
 export default function SettingsPage() {
   const router = useRouter();
   const { lang, setLang, elder, setElder, t } = usePrefs();
@@ -179,8 +154,8 @@ export default function SettingsPage() {
       </Card>
 
       <SectionTitle>Notifications</SectionTitle>
-      <Card className="p-0">
-        <PushRow />
+      <Card className="p-4">
+        <PushPanel />
       </Card>
 
       <SectionTitle>Emergency</SectionTitle>

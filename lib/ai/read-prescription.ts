@@ -1,6 +1,6 @@
 import "server-only";
-import { GoogleGenAI } from "@google/genai";
-import { FALLBACK_MODEL, READING_A_MODEL, READING_B_MODEL } from "./models";
+import { GoogleGenAI, type ThinkingLevel } from "@google/genai";
+import { FALLBACK_MODEL, FAST_THINKING, READING_A_MODEL, READING_A_THINKING, READING_B_MODEL, READING_TIMEOUT_MS } from "./models";
 
 // One reading = a plain transcription of what is written. The AI never decides status,
 // never corrects spelling to a known medicine, and returns null for anything unclear.
@@ -64,7 +64,12 @@ async function ask(model: string, prompt: string, image: { data: string; mimeTyp
   const res = await ai().models.generateContent({
     model,
     contents: [{ role: "user", parts: [{ inlineData: image }, { text: prompt }] }],
-    config: { responseMimeType: "application/json", responseJsonSchema: SCHEMA },
+    config: {
+      responseMimeType: "application/json",
+      responseJsonSchema: SCHEMA,
+      thinkingConfig: { thinkingLevel: (model === READING_A_MODEL ? READING_A_THINKING : FAST_THINKING) as ThinkingLevel },
+      abortSignal: AbortSignal.timeout(READING_TIMEOUT_MS),
+    },
   });
   const parsed = JSON.parse(res.text ?? "{}") as { items?: ReadItem[]; doctor?: unknown };
   if (!Array.isArray(parsed.items)) throw new Error("Reading returned no items list");

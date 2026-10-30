@@ -10,6 +10,7 @@ import { canManage } from "@/lib/server/auth";
 import { istDate } from "@/lib/server/time";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import type { AgentTool } from "./types";
+import { catalogNamesIn } from "@/lib/server/catalog";
 
 // Refill agent. Part 1: the actions, shared by the API routes and the chat assistant.
 // Part 2: `refillTools` for Gemini function calling (another agent plugs them into chat).
@@ -169,11 +170,10 @@ export async function draftRefill(who: Who, id: string, lang: Lang) {
   if (!found.ok) return found;
   const { refill } = found;
   const pharmacy = await getPharmacy(who.supabase, refill.patientId);
-  const { data: catalog } = await who.supabase.from("medicine_catalog").select("name");
   const result = await draftRefillMessage(
     lang,
     { medicine: refill.medicine.name, strength: refill.medicine.strength, quantity: refill.quantity, pharmacy: pharmacy?.name ?? "", patient: pharmacy?.patientName ?? "" },
-    (catalog ?? []).map((c) => c.name as string),
+    (text) => catalogNamesIn(who.supabase, text),
   );
   await supabaseAdmin().from("refill_suggestions").update({ draft_text: result.text, lang }).eq("id", id);
   return { ok: true as const, text: result.text, source: result.source, quantity: refill.quantity };

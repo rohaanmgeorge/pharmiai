@@ -5,6 +5,7 @@ import type { CatalogEntry } from "@/lib/safety/match";
 import { normalizeCode } from "@/lib/safety/shorthand";
 import { computeStatus, type Reading } from "@/lib/safety/status";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { catalogCandidates } from "@/lib/server/catalog";
 
 // POST /api/items/:id/confirm  { catalogId, doseCode, durationDays }
 // A person says "I checked the paper". We re-run the SAME Zero-Guess rules with their
@@ -30,7 +31,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/items/[id]/
   if (!(await canManage(supabase, item.patient_id))) return fail("Not allowed", 403);
   if (item.status === "verified") return NextResponse.json({ status: "verified", reasons: [] });
 
-  const { data: catalog } = await supabase.from("medicine_catalog").select("id, name, ingredients, strength");
+  const catalog = await catalogCandidates(supabase, [item.reading_a as Reading | null, item.reading_b as Reading | null]);
   const result = computeStatus({
     a: item.reading_a as Reading | null,
     b: item.reading_b as Reading | null,

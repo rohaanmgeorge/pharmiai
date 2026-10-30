@@ -3,6 +3,7 @@ import { fail, requireUser, signedPhoto } from "@/lib/server/auth";
 import { daysOfStockLeft, findDuplicateIngredients } from "@/lib/safety/medication-math";
 import { expandShorthand } from "@/lib/safety/shorthand";
 import { findSaving, type Generic } from "@/components/emergency/generic-match";
+import { factSource } from "@/lib/safety/medication-math";
 
 type Catalog = {
   id: string;
@@ -13,6 +14,7 @@ type Catalog = {
   mrp: number | null;
   pack_size: number | null;
   source: string;
+  reviewed?: boolean | null;
   reviewer: string;
   reviewed_at: string;
 } & Record<`uses_${"en" | "ml" | "hi"}` | `side_effects_${"en" | "ml" | "hi"}`, string | null>;
@@ -86,7 +88,7 @@ export async function GET(request: Request, ctx: RouteContext<"/api/meds/[id]">)
     photoUrl: await signedPhoto(supabase, s.pill_photo_path),
     uses,
     sideEffects,
-    source: med.source,
+    source: factSource(med),
     reviewer: med.reviewer,
     reviewedAt: med.reviewed_at,
     duplicates,

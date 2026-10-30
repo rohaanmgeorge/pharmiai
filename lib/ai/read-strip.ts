@@ -1,7 +1,7 @@
 import "server-only";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, type ThinkingLevel } from "@google/genai";
 import type { StripReading } from "@/lib/safety/strip";
-import { FALLBACK_MODEL, READING_A_MODEL, READING_B_MODEL } from "./models";
+import { FALLBACK_MODEL, FAST_THINKING, READING_A_MODEL, READING_A_THINKING, READING_B_MODEL, READING_TIMEOUT_MS } from "./models";
 
 // One reading of a medicine strip/box photo = a plain transcription of what is PRINTED.
 // The AI never decides status, never corrects a name, never guesses an expiry,
@@ -45,7 +45,12 @@ async function ask(model: string, prompt: string, image: { data: string; mimeTyp
   const res = await ai().models.generateContent({
     model,
     contents: [{ role: "user", parts: [{ inlineData: image }, { text: prompt }] }],
-    config: { responseMimeType: "application/json", responseJsonSchema: SCHEMA },
+    config: {
+      responseMimeType: "application/json",
+      responseJsonSchema: SCHEMA,
+      thinkingConfig: { thinkingLevel: (model === READING_A_MODEL ? READING_A_THINKING : FAST_THINKING) as ThinkingLevel },
+      abortSignal: AbortSignal.timeout(READING_TIMEOUT_MS),
+    },
   });
   const parsed = JSON.parse(res.text ?? "{}") as Record<string, unknown>;
   // Keep only the fields we asked for, as plain strings.
