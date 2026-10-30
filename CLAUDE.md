@@ -33,7 +33,8 @@ Mobile-first PWA medicine care assistant (hackathon prototype, fictional data). 
 - Look-alike names: show all candidates, never auto-pick. Never auto-fill dose/timing/duration.
 
 ## Rules
-- Never put secrets in client code, logs, or commits. `SUPABASE_SERVICE_ROLE_KEY` only in `app/api/cron/`.
+- Never put secrets in client code, logs, or commits. `SUPABASE_SERVICE_ROLE_KEY` only on the server (`supabaseAdmin()`), and only AFTER checking `canManage`/`canView` — or in `/api/cron/tick` behind `x-cron-secret`.
+- API routes start with `requireUser(request)` from `lib/server/auth.ts` (cookie or `Authorization: Bearer`).
 - Never commit `data/private/` or `.env*`.
 - No health data in logs.
 - Team are beginners: keep code simple, small files, plain names, short comments explaining *why*.
