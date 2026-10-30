@@ -62,6 +62,8 @@ const PERSONAL_INSTRUCTION = [
   ...INSTRUCTION.slice(1), // Hindi / Malayalam advice forms stay blocked
 ];
 const GENERAL_DIAGNOSIS = [DIAGNOSIS[0], new RegExp(`\\b(looks like|sounds like|seems like) (you have |it'?s |an? )?(\\w+ ){0,2}${ILLNESS}`, "i"), DIAGNOSIS[2], DIAGNOSIS[3]];
+// A sentence that hands the decision to the doctor or pharmacist (and has no amount — checked separately).
+const DEFERS_TO_DOCTOR = /\b(as|if) (your |the )?(doctor|pharmacist)\b|\b(doctor|pharmacist) (advises|advised|prescribed|says|said|tells you)\b|\bas prescribed\b|\bon the label\b/i;
 // Questions about identifying a tablet by how it looks.
 const LOOKS_QUESTION = /\b(white|yellow|pink|red|blue|orange|green|round|oval|small|big|marking|marked|shape|colou?r|loose)\b.*\b(tablet|pill|capsule|goli)\b|\b(what|which) (is )?(this|that) (tablet|pill|capsule)\b|गोली कौन|ഏത് ഗുളിക/i;
 
@@ -80,7 +82,10 @@ export function guardReply(input: { text: string; lang: Lang; catalogNames: stri
     const amounts = [...text.matchAll(new RegExp(DOSE_AMOUNT.source, "gi"))].map((m) => norm(m[0]).replace(/\s+/g, ""));
     const toolCompact = norm(toolText).replace(/\s+/g, "");
     if (amounts.some((a) => !toolCompact.includes(a))) return refuse("dose_amount");
-    if (PERSONAL_INSTRUCTION.some((r) => r.test(text))) return refuse("instruction");
+    // Checked per sentence: "Take it only as your doctor advises" defers to the doctor and is fine;
+    // "Take it twice a day" or "You should stop it" is an instruction and is blocked.
+    const sentences = text.split(/(?<=[.!?।])\s+/);
+    if (sentences.some((x) => !DEFERS_TO_DOCTOR.test(x) && PERSONAL_INSTRUCTION.some((r) => r.test(x)))) return refuse("instruction");
     if (GENERAL_DIAGNOSIS.some((r) => r.test(text))) return refuse("diagnosis");
     if (LOOKS_QUESTION.test(question)) {
       const fromTools = new Set(namesIn(toolText, catalogNames).map(norm));

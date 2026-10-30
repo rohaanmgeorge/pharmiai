@@ -55,7 +55,8 @@ export async function POST(request: Request) {
   // blocks the reply — history is a convenience.
   const reply = async (answer: { speech: string; cards: unknown[]; general?: boolean }) => {
     const { error } = await supabase.from("chat_messages").insert([
-      { user_id: user.id, patient_id: patientId, role: "user", text, lang },
+      // Both rows need the same fields: in a two-row insert, a missing field becomes null, not its default.
+      { user_id: user.id, patient_id: patientId, role: "user", text, cards: [], general: false, lang },
       { user_id: user.id, patient_id: patientId, role: "assistant", text: answer.speech.slice(0, 4000), cards: answer.cards, general: answer.general ?? false, lang },
     ]);
     if (error) console.error("agent: chat history not saved");

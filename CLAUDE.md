@@ -6,7 +6,7 @@ Mobile-first PWA medicine care assistant (hackathon prototype, fictional data). 
 - One **Next.js App Router** app on Vercel (UI in `app/`, API route handlers in `app/api/`). Tailwind v4, shadcn/ui, lucide-react, Motion, Serwist PWA.
 - **Supabase**: Postgres + RLS + Auth + private Storage. Migrations in `supabase/migrations/`, seed CSVs in `supabase/seed/`.
 - **pg_cron + pg_net** call `POST /api/cron/tick` every minute (header `x-cron-secret`).
-- AI: **Google Gemini** via `@google/genai` (free tier; team has no Anthropic key). A stronger Gemini model reads prescriptions (structured JSON output); a faster one runs the voice + escalation agents (function calling). Confirm exact model IDs with the ListModels API before use. Second reading: Google Cloud Vision. Voice: browser Web Speech API only.
+- AI: **Google Gemini** via `@google/genai` (free tier; team has no Anthropic key). A stronger Gemini model reads prescriptions (structured JSON output); a faster one runs the voice + escalation agents (function calling). Confirm exact model IDs with the ListModels API before use. Voice: Gemini (`lib/server/gemini-voice.ts`: listen with flash-lite, speak with the TTS model), browser Web Speech as fallback. Medicines are identified by Gemini (`lib/ai/identify-medicine.ts`) and saved once in `medicine_catalog` with `source_kind = 'ai'` (no downloaded dataset). Free-tier quota: `gemini-3.5-flash` = 20 requests/day, so everything except reading A uses flash-lite.
 
 ## Code map
 - `app/(app)/*` — screens inside the app shell (bottom nav / side nav + SOS button). Full-screen flows: `app/scan`, `app/voice`, `app/sos`, `app/elder`, `app/card/[token]`.
@@ -30,6 +30,7 @@ Mobile-first PWA medicine care assistant (hackathon prototype, fictional data). 
 - Schedules, reminders, medicine info, and prices exist only for `verified` items — enforced by DB trigger `require_verified`, not just UI.
 - Facts about a specific medicine, prices, generics, and shorthand come from DB tables (cards). The assistant may give *general* health information in its own words (companion mode, decided 2026-10-30), shown with a "General information from AI" label; `guardReply(..., question)` still blocks personal dose instructions, diagnoses, unknown amounts, and naming a pill described by its look. Danger signs always show SOS (rule in `lib/agent/run.ts`).
 - Hand-added medicines (`/meds/add`) must be picked from the catalog — never free text — with the dose from the shorthand table.
+- AI-identified medicines are labelled "not pharmacist-reviewed"; prices are AI estimates for the profile's city. A person still confirms every medicine before reminders exist (`require_verified`).
 - `safety_log` is append-only.
 - Look-alike names: show all candidates, never auto-pick. Never auto-fill dose/timing/duration.
 

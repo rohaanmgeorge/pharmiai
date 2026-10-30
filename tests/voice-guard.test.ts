@@ -81,6 +81,9 @@ describe("companion mode (the person's question is known)", () => {
     expect(ask("You should stop Glyconil.", "Should I stop Glyconil?").blocked).toBe(true);
     expect(ask("Switch to the cheaper brand.", "Is there a cheaper one?").blocked).toBe(true);
     expect(ask("Do not stop your medicine without asking your doctor.", "Can I stop?").blocked).toBe(false);
+    expect(ask("Dolo 650 is used for fever. Take it only as your doctor advises.", "What is Dolo 650?").blocked).toBe(false);
+    expect(ask("Take it twice a day after food.", "How do I take Dolo?").blocked).toBe(true);
+    expect(ask("It is used for fever. You should stop it after three days.", "When do I stop?").blocked).toBe(true);
   });
 
   it("still blocks diagnosis", () => {

@@ -12,7 +12,7 @@ export async function GET(request: Request) {
     .from("chat_messages")
     .select("id, role, text, cards, general, created_at")
     .eq("patient_id", patientId)
-    .order("created_at", { ascending: false })
+    .order("id", { ascending: false }) // insertion order: a question is always saved before its answer
     .limit(60);
   if (error) return fail("Could not load your conversation", 500);
   return NextResponse.json({ messages: (data ?? []).reverse() });
