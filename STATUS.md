@@ -24,9 +24,16 @@ _Last updated: 2026-10-30 06:15 IST_
 - Migration `0002_gemini_readings.sql` — confirm it has been run in Supabase.
 - Malayalam/Hindi strings are drafts (Person B to review).
 
-## In progress (06:15)
-- Medicine scan + expiry, locker, refill agent, family circle + live dashboard, "Are you okay?" screens, SOS/contacts/card/settings, savings, medicine detail, chat + voice assistant, Elder screen on real data.
+## All committed features — LIVE (06:30)
+Medicine scan + expiry, prescription locker, refill agent, family care circle + live dashboard (Realtime + 30 s fallback), "Are you okay?" check, SOS (test mode, contact links, public ack) + emergency contacts + emergency card, settings (profile, language, card, delete my data), savings, medicine detail, chat + voice assistant (Gemini tools + output guard + keyword fallback), Elder screen.
+- Checks: tsc, eslint, `next build`, 106 unit tests pass. End-to-end against the real DB with temp users: 34/36 pass. Failing: "Delete my data" until migration `0007_emergency.sql` is applied.
+
+## Known gaps
+- Run `supabase/migrations/0007_emergency.sql` (then re-test delete).
+- Real medicines need catalog rows (Person B, `npm run find-missing`).
+- New screens' text is English only; Malayalam/Hindi drafts need review. No strip photo tested yet (Person B: strip photos in `data/private/strips/`).
+- Not tested on a real phone yet: push delivery, camera, voice, Realtime on mobile data.
+- Usable stock doesn't subtract expired strips automatically beyond the expiry job.
 
 ## Next step
-- Finish and wire the features above, test against the database, deploy before the 09:00 mentor review.
-- Person B: real catalog rows (`npm run find-missing` → fill `data/private/catalog-todo.csv` → import).
+- Phone test checklist (PLAN §11), demo rehearsal, PPT.
