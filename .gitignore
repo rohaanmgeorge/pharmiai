@@ -25,6 +25,5 @@ supabase/.temp/
 npm-debug.log*
 
 # generated service worker
-public/sw.js
 public/sw.js.map
 public/swe-worker*
